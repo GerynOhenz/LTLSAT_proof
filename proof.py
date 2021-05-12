@@ -19,7 +19,7 @@ def run_train(config):
 	log_file=open(os.path.join(model_path, "model.log"), "w")
 	model_path=config["model_path"]
 
-	train_data=LTL_Dataset(config["data_dir"], LTL_to_index, trace_to_index)
+	train_data=LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
 	
 	model=Model_with_Proof(n_src_vocab=len(LTL_to_index),
 							n_tgt_vocab=len(trace_to_index),
@@ -53,7 +53,7 @@ def run_train(config):
 								cuda_data["source_len"],
 								cuda_data["right_pos_truth"],
 								cuda_data["target"],
-								cuda_data["target_len"],
+								cuda_data["state_len"],
 								cuda_data["target_offset"],
 								cuda_data["node_label"],
 								cuda_data["edge_index"],
@@ -76,7 +76,7 @@ if __name__=="__main__":
 
 	parser = ArgumentParser(description='Proof')
 
-	parser.add_argument('--data_dir', type=str, require=True)
+	parser.add_argument('--data_file', type=str, require=True)
 	parset.add_argument('--LTL_vocab', type=str, default='LTL_vocab.txt')
 	parset.add_argument('--trace_vocab', type=str, default='trace_vocab.txt')
 	parser.add_argument('--model_path', type=str, default=None)
@@ -89,15 +89,17 @@ if __name__=="__main__":
 	parser.add_argument('--nhid', type=int, default=512)
 	parser.add_argument('--dropout', type=float, default=0.1)
 	parser.add_argument('--d_block', type=int, default=256)
-	parser.add_argument('P_node_hid', type=int, default=512)
-	parser.add_argument('P_edge_hid', type=int, default=512)
-	parser.add_argument('loss_weight', type=int, nargs='+', default=[3, 3, 2, 1])
+	parser.add_argument('--P_node_hid', type=int, default=512)
+	parser.add_argument('--P_edge_hid', type=int, default=512)
+	parser.add_argument('--loss_weight', type=int, nargs='+', default=[3, 3, 2, 1])
 
 	parser.add_argument('--lr', type=float, default=0.00025)
 
 	parser.add_argument('--batch_size', type=int, default=64)
 	parser.add_argument('--epochs', type=int, default=150)
 	parser.add_argument('--is_train', type=bool, require=True)
+	
+	args = parser.parse_args()
 
 	config=vars(args)
 
