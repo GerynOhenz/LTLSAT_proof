@@ -1,9 +1,11 @@
 import os
-from utils import LTL_Dataset, input_collate_fn_train, input_collate_fn_test, convert_to_cuda, Accuracy
+import json
+import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from argparse import ArgumentParser
 from model import Model_with_Proof, Evaluator
+from utils import LTL_Dataset, input_collate_fn_train, input_collate_fn_test, convert_to_cuda, Accuracy, index_to_sentence
 from tqdm import tqdm
 
 def run_train(config):
@@ -13,11 +15,11 @@ def run_train(config):
 		index_to_trace=[x.strip() for x in f]
 
 	LTL_to_index={x:i for i, x in enumerate(index_to_LTL)}
-	trace_to_index={x:i for i, x in enumerate(trace_to_LTL)}
+	trace_to_index={x:i for i, x in enumerate(index_to_trace)}
 
 	device=config["device"]
-	log_file=open(os.path.join(model_path, "model.log"), "w")
 	model_path=config["model_path"]
+	log_file=open(os.path.join(model_path, "model.log"), "w")
 
 	train_data=LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
 	
@@ -61,7 +63,7 @@ def run_train(config):
 								cuda_data["edge_index"],
 								cuda_data["edge_label"])
 
-			x, y=Accuracy(output, cuda_data["target"], trace_to_index["[PAD]"])
+			x, y=Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
 			acc_count+=x
 			count+=y
 		
@@ -80,7 +82,7 @@ def run_val(config):
 		index_to_trace=[x.strip() for x in f]
 
 	LTL_to_index={x:i for i, x in enumerate(index_to_LTL)}
-	trace_to_index={x:i for i, x in enumerate(trace_to_LTL)}
+	trace_to_index={x:i for i, x in enumerate(index_to_trace)}
 
 	device=config["device"]
 	model_file=config["model_path"]
@@ -106,13 +108,13 @@ def run_val(config):
 					n_src_vocab=len(index_to_LTL),
 					n_tgt_vocab=len(index_to_trace),
 					d_model=config["d_model"],
-					n_beam=5,
+					n_beam=config["n_beam"],
 					max_seq_len=config["max_seq_len"],
 					src_pad_idx=LTL_to_index["[PAD]"],
 					tgt_pad_idx=trace_to_index["[PAD]"],
 					tgt_sos_idx=trace_to_index["[SOS]"],
-					tgt_semicolon_idx=trace_to_index[";"],,
-					tgt_eos_idx=trace_to_index["[EOS]"],,
+					tgt_semicolon_idx=trace_to_index[";"],
+					tgt_eos_idx=trace_to_index["[EOS]"],
 					len_penalty=1.0)
 
 	batch_size=config["batch_size"]
@@ -121,23 +123,23 @@ def run_val(config):
 
 	output=[]
 	
-	for data in train_loader:
+	for data in test_loader:
 		cuda_data=convert_to_cuda(data, device)
-		target, proof=evaluator.run(source=model(cuda_data["source"], source_len=cuda_data["source_len"]))
-		target=utils.index_to_sentence(target, index_to_trace)
-		output.append([{"ltl_pre":test_data[x], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
+		target, proof=evaluator.run(source=cuda_data["source"], source_len=cuda_data["source_len"])
+		target=index_to_sentence(target, index_to_trace)
+		output.append([{"ltl_pre":test_data.raw_data[x]["ltl_pre"], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
 
-	with open(os.path.join(config["result_path"], "res"+config["data_file"]), "w") as f:
+	with open(os.path.join(config["result_path"], "res-"+config["data_file"].split(".")[0]+"-"+os.path.basename(model_file)), "w") as f:
 		json.dump(output, fp=f, indent=4)
 
 if __name__=="__main__":
 
 	parser = ArgumentParser(description='Proof')
 
-	parser.add_argument('--data_file', type=str, require=True)
-	parset.add_argument('--LTL_vocab', type=str, default='LTL_vocab.txt')
-	parset.add_argument('--trace_vocab', type=str, default='trace_vocab.txt')
-	parser.add_argument('--model_path', type=str, default=None)
+	parser.add_argument('--data_file', type=str, required=True)
+	parser.add_argument('--LTL_vocab', type=str, default='LTL_vocab.txt')
+	parser.add_argument('--trace_vocab', type=str, default='trace_vocab.txt')
+	parser.add_argument('--model_path', type=str, default='model')
 	parser.add_argument('--result_path', type=str, default='result')
 
 	parser.add_argument('--device', type=str, default='cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -150,20 +152,21 @@ if __name__=="__main__":
 	parser.add_argument('--d_block', type=int, default=256)
 	parser.add_argument('--P_node_hid', type=int, default=512)
 	parser.add_argument('--P_edge_hid', type=int, default=512)
+	parser.add_argument('--n_beam', type=int, default=5)
 	parser.add_argument('--loss_weight', type=int, nargs='+', default=[3, 3, 2, 1])
 
 	parser.add_argument('--lr', type=float, default=0.00025)
 
 	parser.add_argument('--batch_size', type=int, default=64)
 	parser.add_argument('--epochs', type=int, default=150)
-	parser.add_argument('--is_train', type=bool, require=True)
+	parser.add_argument('--is_train', type=int, required=True)
 	parser.add_argument('--max_seq_len', type=int, default=100)
 	
 	args = parser.parse_args()
 
 	config=vars(args)
 
-	if config["is_train"]:
+	if config["is_train"]==1:
 		run_train(config)
 	else:
 		run_val(config)

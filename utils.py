@@ -19,19 +19,23 @@ class LTL_Dataset(Dataset):
 				self.raw_data.extend(json.load(f))
 		'''
 		with open(data_file, "r") as f:
-			self.raw_data=json.load(f)
+			self.raw_data=json.load(f)[:10]
 
 	def __getitem__(self, item):
 		cur=self.raw_data[item]
 		ret={}
 		ret["id"]=item
-		ret["source"]=[self.LTL_dict["CLS"]]+[self.LTL_dict[x] for x in cur["ltl_pre"]]+[self.LTL_dict["EOS"]]
-		ret["source_len"]=len(cur["ltl_pre"])
+		ret["source"]=[self.LTL_dict["[CLS]"]]+sentence_to_index(cur["ltl_pre"], self.LTL_dict)+[self.LTL_dict["[EOS]"]]
+		ret["source_len"]=len(ret["source"])-2
 		ret["right_pos_truth"]=[pos for pos in cur["pair_set"]]
-		ret["target"]=[self.trace_dict["SOS"]]+[self.trace_dict[x] for x in cur["trace"]]+[self.trace_dict["EOS"]]
+		ret["target"]=[self.trace_dict["[SOS]"]]+sentence_to_index(cur["trace"], self.trace_dict)+[self.trace_dict["[EOS]"]]
+		ret["loop_start"]=0
 
 		ret["target_offset"]=[0]
-		for state in range(cur["trace"].split(";")):
+		for state in cur["trace"].split(";"):
+			if '{' in state:
+				ret["loop_start"]=len(ret["target_offset"])-1
+
 			ret["target_offset"].append(ret["target_offset"][-1]+len(state)+1)
 		ret["target_offset"][-1]-=1
 
@@ -49,7 +53,7 @@ def input_collate_fn_train(batch_data):
 			"source_len":[],
 			"right_pos_truth":[],
 			"target":[],
-			"target_len":[],
+			"state_len":[],
 			"target_offset":[],
 			"node_label":[],
 			"edge_index":[],
@@ -61,23 +65,22 @@ def input_collate_fn_train(batch_data):
 	state_maxlen=0
 
 	for cur in batch_data:
-		source_maxlen=max(source_maxlen, len(cur["source"]))
+		source_maxlen=max(source_maxlen, cur["source_len"])
 		target_maxlen=max(target_maxlen, len(cur["target"]))
 		state_maxlen=max(state_maxlen, cur["state_len"])
-	
-	state_maxlen+=1 #EOS
+
 	node_maxlen=source_maxlen*state_maxlen
 	
 	for cur in batch_data:
 		ret["id"].append(cur["id"])
-		ret["source"].append(cur["source"]+[0]*(source_maxlen-len(cur["source"])))
+		ret["source"].append(cur["source"]+[0]*(source_maxlen+2-len(cur["source"])))
 		ret["source_len"].append(cur["source_len"])
 		ret["right_pos_truth"].append(cur["right_pos_truth"]+[-1]*(source_maxlen-len(cur["right_pos_truth"])))
 		ret["target"].append(cur["target"]+[0]*(target_maxlen-len(cur["target"])))
 		ret["state_len"].append(cur["state_len"])
-		ret["target_offset"].append(cur["target_offset"]+[0]*(state_maxlen-len(cur["target_offset"])))
+		ret["target_offset"].append(cur["target_offset"]+[0]*(state_maxlen+1-len(cur["target_offset"])))
 		ret["node_label"].append([-1]*node_maxlen)
-		ret["edge_index"].append([[0]*6 for _ in range(node_maxlen)])
+		ret["edge_index"].append([[(0, 0)]*6 for _ in range(node_maxlen)])
 		ret["edge_label"].append([[-1]*6 for _ in range(node_maxlen)])
 
 		for suffix in range(cur["state_len"]):
@@ -86,15 +89,16 @@ def input_collate_fn_train(batch_data):
 				ret["node_label"][-1][index]=2
 				cnt=0
 				for i in range(2):
-					if suffix+i<cur["state_len"]:
-						ret["edge_index"][-1][index][cnt]=(suffix+i)*source_maxlen+left
+					next_suffix=(suffix+i if suffix+i<cur["state_len"] else cur["loop_start"])
+
+					ret["edge_index"][-1][index][cnt]=(next_suffix, left)
+					cnt+=1
+					if left+1<cur["source_len"]:
+						ret["edge_index"][-1][index][cnt]=(next_suffix, left+1)
 						cnt+=1
-						if left+1<cur["source_len"]:
-							ret["edge_index"][-1][index][cnt]=(suffix+i)*source_maxlen+left+1
+						if cur["right_pos_truth"][left+1]+1<cur["source_len"]:
+							ret["edge_index"][-1][index][cnt]=(next_suffix, cur["right_pos_truth"][left+1]+1)
 							cnt+=1
-							if cur["right_pos_truth"][left+1]+1<cur["source_len"]:
-								ret["edge_index"][-1][index][cnt]=(suffix+i)*source_maxlen+cur["right_pos_truth"][left+1]+1
-								cnt+=1
 				ret["edge_label"][-1][index][:cnt]=[0]*cnt
 
 		for x, y in cur["proof"]:
@@ -102,9 +106,22 @@ def input_collate_fn_train(batch_data):
 			y_index=y[0]*source_maxlen+y[1][0]
 			ret["node_label"][-1][x_index]=x[2]
 			ret["node_label"][-1][y_index]=y[2]
-			ret["edge_label"][-1][y_index][ret["edge_index"][-1][y_index].index(x_index)]=1
+			try:
+				ret["edge_label"][-1][y_index][ret["edge_index"][-1][y_index].index((x[0], x[1][0]))]=1
+			except:
+				print(x[0], x[1][0], source_maxlen)
+				print(ret["edge_index"][-1][y_index])
+				print(cur["right_pos_truth"])
+				print(cur["proof"])
+				print(cur["source"])
+				exit(0)
 
-	return {key:torch.IntTensor(value) for key, value in ret.items()}
+		for node_index in range(len(ret["edge_index"][-1])):
+			for son_index in range(len(ret["edge_index"][-1][node_index])):
+				x, y=ret["edge_index"][-1][node_index][son_index]
+				ret["edge_index"][-1][node_index][son_index]=x*source_maxlen+y
+
+	return {key:torch.tensor(value, dtype=torch.long) for key, value in ret.items()}
 
 def input_collate_fn_test(batch_data):
 	ret={"id":[], "source":[], "source_len":[]}
@@ -119,24 +136,37 @@ def input_collate_fn_test(batch_data):
 		ret["source"].append(cur["source"]+[0]*(source_maxlen-len(cur["source"])))
 		ret["source_len"].append(cur["source_len"])
 
-	return {key:torch.IntTensor(value) for key, value in ret.items()}
+	return {key:torch.tensor(value, dtype=torch.long) for key, value in ret.items()}
 
 def index_to_sentence(target, index_to_trace):
 	ret=[]
 	for x in target:
 		sub=[]
 		for y in x:
-			if index_to_trace[y]=="EOS": break
+			if index_to_trace[y]=="[EOS]": break
 			sub.append(index_to_trace[y])
 		ret.append("".join(sub))
+
+	return ret
+
+def sentence_to_index(sentence, sentence_to_index):
+	ret=[]
+	rest=""
+	for x in sentence:
+		rest+=x
+		if rest in sentence_to_index:
+			ret.append(sentence_to_index[rest])
+			rest=""
+
+	assert(rest=="")
 
 	return ret
 
 def Accuracy(outputs, targets, pad_index):
     batch_size, seq_len, vocabulary_size = outputs.size()
 
-    outputs = outputs.view(batch_size * seq_len, vocabulary_size)
-    targets = targets.view(batch_size * seq_len)
+    outputs = outputs.reshape(batch_size * seq_len, vocabulary_size)
+    targets = targets.reshape(batch_size * seq_len)
 
     predicts = outputs.argmax(dim=1)
     corrects = predicts == targets
