@@ -1,9 +1,9 @@
 import os
-from utils import LTL_Dataset, input_collate_fn, convert_to_cuda
+from utils import LTL_Dataset, input_collate_fn_train, input_collate_fn_test, convert_to_cuda, Accuracy
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from argparse import ArgumentParser
-from model import Model_with_Proof
+from model import Model_with_Proof, Evaluator
 from tqdm import tqdm
 
 def run_train(config):
@@ -45,11 +45,13 @@ def run_train(config):
 		print("epoch: ", epoch)
 		print("epoch: ", epoch, file=log_file)
 		
-		train_loader=DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=input_collate_fn)
-		
+		train_loader=DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=input_collate_fn_train)
+		acc_count=0
+		count=0
+
 		for data in train_loader:
 			cuda_data=convert_to_cuda(data, device)
-			logits, loss=model(cuda_data["source"],
+			output, loss=model(cuda_data["source"],
 								cuda_data["source_len"],
 								cuda_data["right_pos_truth"],
 								cuda_data["target"],
@@ -58,19 +60,75 @@ def run_train(config):
 								cuda_data["node_label"],
 								cuda_data["edge_index"],
 								cuda_data["edge_label"])
+
+			x, y=Accuracy(output, cuda_data["target"], trace_to_index["[PAD]"])
+			acc_count+=x
+			count+=y
 		
 			optimizer.zero_grad()
 			loss.backward()
 			optimizer.step()
 
 		torch.save(model.state_dict(), os.path.join(model_path, "model"+str(epoch)+".pkl"))
-		print("loss: ", loss.data)
-		print("loss: ", loss, file=log_file)
-		print("label_acc: ", label_acc)
-		print("label_acc: ", label_acc, file=log_file)
+		print("accuracy: ", acc_count/count)
+		print("accuracy: ", acc_count/count, file=log_file)
 
 def run_val(config):
-	pass
+	with open(config["LTL_vocab"], "r") as f:
+		index_to_LTL=[x.strip() for x in f]
+	with open(config["trace_vocab"], "r") as f:
+		index_to_trace=[x.strip() for x in f]
+
+	LTL_to_index={x:i for i, x in enumerate(index_to_LTL)}
+	trace_to_index={x:i for i, x in enumerate(trace_to_LTL)}
+
+	device=config["device"]
+	model_file=config["model_path"]
+
+	test_data=LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
+	
+	model=Model_with_Proof(n_src_vocab=len(LTL_to_index),
+							n_tgt_vocab=len(trace_to_index),
+							d_model=config["d_model"],
+							nhead=config["nhead"],
+							nlayers=config["nlayers"],
+							nhid=config["nhid"],
+							dropout=config["dropout"],
+							d_block=config["d_block"],
+							P_node_hid=config["P_node_hid"],
+							P_edge_hid=config["P_edge_hid"],
+							loss_weight=torch.FloatTensor(config["loss_weight"]).to(device))
+
+	model.load_state_dict(torch.load(model_file))
+	model.to(device)
+
+	evaluator=Evaluator(model=model,
+					n_src_vocab=len(index_to_LTL),
+					n_tgt_vocab=len(index_to_trace),
+					d_model=config["d_model"],
+					n_beam=5,
+					max_seq_len=config["max_seq_len"],
+					src_pad_idx=LTL_to_index["[PAD]"],
+					tgt_pad_idx=trace_to_index["[PAD]"],
+					tgt_sos_idx=trace_to_index["[SOS]"],
+					tgt_semicolon_idx=trace_to_index[";"],,
+					tgt_eos_idx=trace_to_index["[EOS]"],,
+					len_penalty=1.0)
+
+	batch_size=config["batch_size"]
+		
+	test_loader=DataLoader(test_data, batch_size=batch_size, shuffle=False, collate_fn=input_collate_fn_test)
+
+	output=[]
+	
+	for data in train_loader:
+		cuda_data=convert_to_cuda(data, device)
+		target, proof=evaluator.run(source=model(cuda_data["source"], source_len=cuda_data["source_len"]))
+		target=utils.index_to_sentence(target, index_to_trace)
+		output.append([{"ltl_pre":test_data[x], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
+
+	with open(os.path.join(config["result_path"], "res"+config["data_file"]), "w") as f:
+		json.dump(output, fp=f, indent=4)
 
 if __name__=="__main__":
 
@@ -80,6 +138,7 @@ if __name__=="__main__":
 	parset.add_argument('--LTL_vocab', type=str, default='LTL_vocab.txt')
 	parset.add_argument('--trace_vocab', type=str, default='trace_vocab.txt')
 	parser.add_argument('--model_path', type=str, default=None)
+	parser.add_argument('--result_path', type=str, default='result')
 
 	parser.add_argument('--device', type=str, default='cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -98,6 +157,7 @@ if __name__=="__main__":
 	parser.add_argument('--batch_size', type=int, default=64)
 	parser.add_argument('--epochs', type=int, default=150)
 	parser.add_argument('--is_train', type=bool, require=True)
+	parser.add_argument('--max_seq_len', type=int, default=100)
 	
 	args = parser.parse_args()
 

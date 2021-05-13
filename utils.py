@@ -24,6 +24,7 @@ class LTL_Dataset(Dataset):
 	def __getitem__(self, item):
 		cur=self.raw_data[item]
 		ret={}
+		ret["id"]=item
 		ret["source"]=[self.LTL_dict["CLS"]]+[self.LTL_dict[x] for x in cur["ltl_pre"]]+[self.LTL_dict["EOS"]]
 		ret["source_len"]=len(cur["ltl_pre"])
 		ret["right_pos_truth"]=[pos for pos in cur["pair_set"]]
@@ -42,8 +43,9 @@ class LTL_Dataset(Dataset):
 	def __len__(self):
 		return len(self.raw_data)
 
-def input_collate_fn(batch_data):
-	ret={"source":[],
+def input_collate_fn_train(batch_data):
+	ret={"id":[],
+			"source":[],
 			"source_len":[],
 			"right_pos_truth":[],
 			"target":[],
@@ -67,6 +69,7 @@ def input_collate_fn(batch_data):
 	node_maxlen=source_maxlen*state_maxlen
 	
 	for cur in batch_data:
+		ret["id"].append(cur["id"])
 		ret["source"].append(cur["source"]+[0]*(source_maxlen-len(cur["source"])))
 		ret["source_len"].append(cur["source_len"])
 		ret["right_pos_truth"].append(cur["right_pos_truth"]+[-1]*(source_maxlen-len(cur["right_pos_truth"])))
@@ -102,3 +105,45 @@ def input_collate_fn(batch_data):
 			ret["edge_label"][-1][y_index][ret["edge_index"][-1][y_index].index(x_index)]=1
 
 	return {key:torch.IntTensor(value) for key, value in ret.items()}
+
+def input_collate_fn_test(batch_data):
+	ret={"id":[], "source":[], "source_len":[]}
+
+	source_maxlen=0
+
+	for cur in batch_data:
+		source_maxlen=max(source_maxlen, len(cur["source"]))
+	
+	for cur in batch_data:
+		ret["id"].append(cur["id"])
+		ret["source"].append(cur["source"]+[0]*(source_maxlen-len(cur["source"])))
+		ret["source_len"].append(cur["source_len"])
+
+	return {key:torch.IntTensor(value) for key, value in ret.items()}
+
+def index_to_sentence(target, index_to_trace):
+	ret=[]
+	for x in target:
+		sub=[]
+		for y in x:
+			if index_to_trace[y]=="EOS": break
+			sub.append(index_to_trace[y])
+		ret.append("".join(sub))
+
+	return ret
+
+def Accuracy(outputs, targets, pad_index):
+    batch_size, seq_len, vocabulary_size = outputs.size()
+
+    outputs = outputs.view(batch_size * seq_len, vocabulary_size)
+    targets = targets.view(batch_size * seq_len)
+
+    predicts = outputs.argmax(dim=1)
+    corrects = predicts == targets
+
+    corrects.masked_fill_((targets == pad_index), 0)
+
+    correct_count = corrects.sum().item()
+    count = (targets != pad_index).sum().item()
+
+    return correct_count, count
