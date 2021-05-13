@@ -437,7 +437,7 @@ class Evaluator:
 					for k in range(2):
 						if node_mask[i][edge_choice[i][j][k]]!=2:
 							tmp=edge_choice[i][j][k]
-							x=[tmp/max_source_len, [tmp%max_source_len, right_pos[i][tmp%max_source_len]], node_mask[i][tmp]]
+							x=[tmp//max_source_len, [tmp%max_source_len, right_pos[i][tmp%max_source_len]], node_mask[i][tmp]]
 							x[0], x[1][0], x[1][1], x[2]=x[0].item(), x[1][0].item(), x[1][1].item(), x[2].item()
 							sub_proof.append(x)
 			proof.append(sub_proof)

@@ -19,7 +19,7 @@ class LTL_Dataset(Dataset):
 				self.raw_data.extend(json.load(f))
 		'''
 		with open(data_file, "r") as f:
-			self.raw_data=json.load(f)[:10]
+			self.raw_data=json.load(f)
 
 	def __getitem__(self, item):
 		cur=self.raw_data[item]

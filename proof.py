@@ -129,7 +129,7 @@ def run_val(config):
 		target=index_to_sentence(target, index_to_trace)
 		output.append([{"ltl_pre":test_data.raw_data[x]["ltl_pre"], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
 
-	with open(os.path.join(config["result_path"], "res-"+config["data_file"].split(".")[0]+"-"+os.path.basename(model_file)), "w") as f:
+	with open(os.path.join(config["result_path"], "res-"+os.path.basename(model_file).split(".")[0]+"-"+os.path.basename(config["data_file"])), "w") as f:
 		json.dump(output, fp=f, indent=4)
 
 if __name__=="__main__":
