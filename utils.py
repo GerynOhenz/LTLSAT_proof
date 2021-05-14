@@ -96,6 +96,14 @@ def input_collate_fn_train(batch_data):
 					if left+1<cur["source_len"]:
 						ret["edge_index"][-1][index][cnt]=(next_suffix, left+1)
 						cnt+=1
+						# try:
+						# 	temp=cur["right_pos_truth"][left+1]
+						# except:
+						# 	print(cur["id"])
+						# 	print(cur["source"])
+						# 	print(cur["right_pos_truth"])
+						# 	print(left)
+						# 	exit(0)
 						if cur["right_pos_truth"][left+1]+1<cur["source_len"]:
 							ret["edge_index"][-1][index][cnt]=(next_suffix, cur["right_pos_truth"][left+1]+1)
 							cnt+=1
