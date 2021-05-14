@@ -165,7 +165,7 @@ if __name__=="__main__":
 
 	parser.add_argument('--lr', type=float, default=0.00025)
 
-	parser.add_argument('--batch_size', type=int, default=64)
+	parser.add_argument('--batch_size', type=int, default=128)
 	parser.add_argument('--epochs', type=int, default=150)
 	parser.add_argument('--is_train', type=int, required=True)
 	parser.add_argument('--max_seq_len', type=int, default=100)

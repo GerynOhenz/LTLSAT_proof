@@ -86,9 +86,10 @@ class TransformerModel(nn.Module):
 
 
 	# 简单的上三角矩阵
-	def subsequent_masking(self, sz):
+	def subsequent_masking(self, x):
 		# x: (batch_size, seq_len - 1)
-		subsequent_mask=torch.triu(torch.ones(sz, sz), diagonal=1) == 1
+		sz=x.shape[-1]
+		subsequent_mask=torch.triu(torch.ones((sz, sz), device=x.device), diagonal=1) == 1
 		return subsequent_mask
 
 	def encode(self, sources):
@@ -110,7 +111,7 @@ class TransformerModel(nn.Module):
 		tgt = tgt.transpose(0, 1)  # (T, N, E)
 		# get mask
 		tgt_key_padding_mask = self.pad_masking(targets)  # (N, T)
-		tgt_mask = self.subsequent_masking(targets_len)
+		tgt_mask = self.subsequent_masking(targets)
 		dec_output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask,
 											  tgt_key_padding_mask=tgt_key_padding_mask,
 											  memory_key_padding_mask=memory_key_padding_mask)  # (T, N, E)
