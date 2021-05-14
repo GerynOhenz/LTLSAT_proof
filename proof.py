@@ -22,6 +22,13 @@ def run_train(config):
 	log_file=open(os.path.join(model_path, "model.log"), "w")
 
 	train_data=LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
+
+	train_loader=DataLoader(train_data, batch_size=config["batch_size"], shuffle=False, collate_fn=input_collate_fn_train)
+
+	for data in train_loader:
+		pass
+
+	exit(0)
 	
 	model=Model_with_Proof(n_src_vocab=len(LTL_to_index),
 							n_tgt_vocab=len(trace_to_index),
