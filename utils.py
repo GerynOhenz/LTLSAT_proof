@@ -112,6 +112,7 @@ def input_collate_fn_train(batch_data):
 				ret["edge_label"][-1][index][:cnt]=[0]*cnt
 
 		for x, y in cur["proof"]:
+			y_index=y[0]*source_maxlen+y[1][0]
 			ret["edge_label"][-1][y_index][ret["edge_index"][-1][y_index].index((x[0], x[1][0]))]=1
 
 		for node_index in range(len(ret["edge_index"][-1])):
