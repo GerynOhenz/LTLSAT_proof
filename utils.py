@@ -83,10 +83,20 @@ def input_collate_fn_train(batch_data):
 		ret["edge_index"].append([[(0, 0)]*6 for _ in range(node_maxlen)])
 		ret["edge_label"].append([[-1]*6 for _ in range(node_maxlen)])
 
+		for x, y in cur["proof"]:
+			x_index=x[0]*source_maxlen+x[1][0]
+			y_index=y[0]*source_maxlen+y[1][0]
+			ret["node_label"][-1][x_index]=x[2]
+			ret["node_label"][-1][y_index]=y[2]
+
 		for suffix in range(cur["state_len"]):
 			for left in range(cur["source_len"]):
 				index=suffix*source_maxlen+left
-				ret["node_label"][-1][index]=2
+				
+				if ret["node_label"][-1][index]==-1:
+					ret["node_label"][-1][index]=2
+					continue
+
 				cnt=0
 				for i in range(2):
 					next_suffix=(suffix+i if suffix+i<cur["state_len"] else cur["loop_start"])
@@ -102,10 +112,6 @@ def input_collate_fn_train(batch_data):
 				ret["edge_label"][-1][index][:cnt]=[0]*cnt
 
 		for x, y in cur["proof"]:
-			x_index=x[0]*source_maxlen+x[1][0]
-			y_index=y[0]*source_maxlen+y[1][0]
-			ret["node_label"][-1][x_index]=x[2]
-			ret["node_label"][-1][y_index]=y[2]
 			ret["edge_label"][-1][y_index][ret["edge_index"][-1][y_index].index((x[0], x[1][0]))]=1
 
 		for node_index in range(len(ret["edge_index"][-1])):

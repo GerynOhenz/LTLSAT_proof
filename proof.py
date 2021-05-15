@@ -41,7 +41,15 @@ def run_train(config):
 							d_block=config["d_block"],
 							P_node_hid=config["P_node_hid"],
 							P_edge_hid=config["P_edge_hid"],
-							loss_weight=torch.FloatTensor(config["loss_weight"]).to(device))
+							loss_weight=torch.FloatTensor(config["loss_weight"]))
+
+	if config["model_file"] is not None:
+		model_dict=model.state_dict()
+		pretrained_dict=torch.load(config["model_file"])
+		pretrained_dict={key:value for key, value in pretrained_dict.items() if key in model_dict}
+		model_dict.update(pretrained_dict)
+		model.load_state_dict(model_dict)
+		
 	model.to(device)
 
 	optimizer=Adam(model.parameters(), lr=config["lr"])
@@ -93,7 +101,7 @@ def run_val(config):
 	trace_to_index={x:i for i, x in enumerate(index_to_trace)}
 
 	device=config["device"]
-	model_file=config["model_path"]
+	model_file=config["model_file"]
 
 	test_data=LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
 	
@@ -149,6 +157,7 @@ if __name__=="__main__":
 	parser.add_argument('--trace_vocab', type=str, default='trace_vocab.txt')
 	parser.add_argument('--model_path', type=str, default='model')
 	parser.add_argument('--result_path', type=str, default='result')
+	parser.add_argument('--model_file', type=str, default=None)
 
 	parser.add_argument('--device', type=str, default='cuda:0' if torch.cuda.is_available() else 'cpu')
 
