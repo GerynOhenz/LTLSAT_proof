@@ -41,7 +41,7 @@ def run_train(config):
 							d_block=config["d_block"],
 							P_node_hid=config["P_node_hid"],
 							P_edge_hid=config["P_edge_hid"],
-							loss_weight=torch.FloatTensor(config["loss_weight"]))
+							loss_weight=torch.FloatTensor(config["loss_weight"]).to(device))
 
 	if config["model_file"] is not None:
 		model_dict=model.state_dict()
