@@ -431,14 +431,19 @@ class Evaluator:
 		n_node=source_len.max()*state_len.max()
 
 		proof=[]
-		for i in range(batch_size):
+		for batch_index in range(batch_size):
 			sub_proof=[]
-			for j in range(n_node):
-				if node_mask[i][j]!=2:
-					for k in range(2):
-						if node_mask[i][edge_choice[i][j][k]]!=2:
-							tmp=edge_choice[i][j][k]
-							x=[tmp//max_source_len, [tmp%max_source_len, right_pos[i][tmp%max_source_len]], node_mask[i][tmp]]
+			q_node=[0]
+			q_head=0
+			while q_head<len(q_node):
+				cur=q_node[q_head]
+				q_head+=1
+				if node_mask[batch_index][cur]!=2:
+					for i in range(2):
+						son=edge_choice[batch_index][cur][i]
+						if node_mask[batch_index][son]!=2 and son not in q_node:
+							q_node.append(son)
+							x=[son//max_source_len, [son%max_source_len, right_pos[batch_index][son%max_source_len]], node_mask[batch_index][son]]
 							x[0], x[1][0], x[1][1], x[2]=x[0].item(), x[1][0].item(), x[1][1].item(), x[2].item()
 							sub_proof.append(x)
 			proof.append(sub_proof)
