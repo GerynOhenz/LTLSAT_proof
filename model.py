@@ -346,7 +346,14 @@ class Evaluator:
 
 				gen_seq=torch.cat((gen_seq[best_r_idx, :], best_k_idx.unsqueeze(dim=1)), dim=-1)
 
-			target=gen_seq[torch.arange(0, batch_size*self.n_beam, self.n_beam).to(device), :]
+			gen_seq=gen_seq[1:]
+			eos_index=gen_seq==self.tgt_eos_idx
+			has_eos, eos_index=eos_index.max(dim=-1)
+			eos_index.masked_fill_(has_eos==0, gen_seq.shape[-1])
+			scores=scores/eos_index.pow(self.len_penalty)
+			best_choice=scores.reshape(batch_size, self.n_beam).argmax(dim=-1)\
+						+torch.arange(0, batch_size*self.n_beam, self.n_beam).to(device)
+			target=gen_seq[best_choice, :]
 
 			state_len=[]
 			loop_start=[]

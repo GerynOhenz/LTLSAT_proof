@@ -144,7 +144,7 @@ def run_val(config):
 					tgt_sos_idx=trace_to_index["[SOS]"],
 					tgt_semicolon_idx=trace_to_index[";"],
 					tgt_eos_idx=trace_to_index["[EOS]"],
-					len_penalty=1.0)
+					len_penalty=config["len_penalty"])
 
 	batch_size=config["batch_size"]
 		
@@ -185,6 +185,7 @@ if __name__=="__main__":
 	parser.add_argument('--P_edge_hid', type=int, default=512)
 	parser.add_argument('--n_beam', type=int, default=5)
 	parser.add_argument('--loss_weight', type=int, nargs='+', default=[3, 3, 2, 1])
+	parser.add_argument('--len_penalty', type=float, default=1.0)
 
 	parser.add_argument('--lr', type=float, default=1e-5)
 
