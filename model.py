@@ -279,7 +279,7 @@ class Model_with_Proof(nn.Module):
 		#loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None], loss_edge[None]))
 		loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None]))
 
-		return output_logits, torch.dot(loss_total, self.loss_weight), loss_total, node_embedding, node
+		return output_logits, torch.dot(loss_total, self.loss_weight), loss_total
 
 class Evaluator:
 	def __init__(self,

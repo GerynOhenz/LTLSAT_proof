@@ -50,10 +50,13 @@ def run_train(config):
 		pretrained_dict={key:value for key, value in pretrained_dict.items() if key in model_dict}
 		model_dict.update(pretrained_dict)
 		model.load_state_dict(model_dict)
+
+		for x in model.transformer.parameters():
+			x.requires_grad=False
 		
 	model.to(device)
 
-	optimizer=Adam(model.parameters(), lr=config["lr"])
+	optimizer=Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config["lr"])
 
 	epochs=config["epochs"]
 	batch_size=config["batch_size"]
@@ -73,7 +76,7 @@ def run_train(config):
 
 		for data in tqdm(train_loader):
 			cuda_data=convert_to_cuda(data, device)
-			output, loss, loss_total, node_embedding, node=model(cuda_data["source"],
+			output, loss, loss_total=model(cuda_data["source"],
 								cuda_data["source_len"],
 								cuda_data["right_pos_truth"],
 								cuda_data["target"],
