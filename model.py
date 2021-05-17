@@ -182,7 +182,7 @@ class Model_with_Proof(nn.Module):
 		self.block_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
 		self.node_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
 		self.edge_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1, weight=torch.tensor([1.0, 4.0]))
-		self.loss_weight=loss_weight[:-1]
+		self.loss_weight=loss_weight
 
 	def _block_match_(self, encode_output):
 		left_encode=self.blockleft(encode_output[:, 1:-1:1])
@@ -271,13 +271,13 @@ class Model_with_Proof(nn.Module):
 		node=self.P_node(node_embedding)
 		loss_node=self.node_loss(node.reshape(-1, 3), node_label.reshape(-1))
 
-		#edge_embedding=self._edge_embedding_(max_source_len*max_state_len, node_embedding, edge_index)
+		edge_embedding=self._edge_embedding_(max_source_len*max_state_len, node_embedding, edge_index)
 
-		#edge=self.P_edge(edge_embedding)
-		#loss_edge=self.edge_loss(edge.reshape(-1, 2), edge_label.reshape(-1))
+		edge=self.P_edge(edge_embedding)
+		loss_edge=self.edge_loss(edge.reshape(-1, 2), edge_label.reshape(-1))
 
-		#loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None], loss_edge[None]))
-		loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None]))
+		loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None], loss_edge[None]))
+		#loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None]))
 
 		return output_logits, torch.dot(loss_total, self.loss_weight), loss_total
 
