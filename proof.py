@@ -69,10 +69,11 @@ def run_train(config):
 		count=0
 
 		loss_list=[]
+		batch_cnt=0
 
-		for data in train_loader:
+		for data in tqdm(train_loader):
 			cuda_data=convert_to_cuda(data, device)
-			output, loss, loss_total=model(cuda_data["source"],
+			output, loss, loss_total, node_embedding, node=model(cuda_data["source"],
 								cuda_data["source_len"],
 								cuda_data["right_pos_truth"],
 								cuda_data["target"],
@@ -80,7 +81,8 @@ def run_train(config):
 								cuda_data["target_offset"],
 								cuda_data["node_label"],
 								cuda_data["edge_index"],
-								cuda_data["edge_label"])
+								cuda_data["edge_label"],
+								log_file)
 
 			loss_list=loss_total.cpu().detach().numpy().tolist()
 
@@ -147,7 +149,7 @@ def run_val(config):
 
 	output=[]
 	
-	for data in test_loader:
+	for data in tqdm(test_loader):
 		cuda_data=convert_to_cuda(data, device)
 		target, proof=evaluator.run(source=cuda_data["source"], source_len=cuda_data["source_len"])
 		target=index_to_sentence(target, index_to_trace)
@@ -181,7 +183,7 @@ if __name__=="__main__":
 	parser.add_argument('--n_beam', type=int, default=5)
 	parser.add_argument('--loss_weight', type=int, nargs='+', default=[3, 3, 2, 1])
 
-	parser.add_argument('--lr', type=float, default=0.00025)
+	parser.add_argument('--lr', type=float, default=1e-5)
 
 	parser.add_argument('--batch_size', type=int, default=128)
 	parser.add_argument('--epochs', type=int, default=150)
