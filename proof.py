@@ -67,9 +67,11 @@ def run_train(config):
 		acc_count=0
 		count=0
 
+		loss_list=[]
+
 		for data in train_loader:
 			cuda_data=convert_to_cuda(data, device)
-			output, loss=model(cuda_data["source"],
+			output, loss, loss_total=model(cuda_data["source"],
 								cuda_data["source_len"],
 								cuda_data["right_pos_truth"],
 								cuda_data["target"],
@@ -78,6 +80,8 @@ def run_train(config):
 								cuda_data["node_label"],
 								cuda_data["edge_index"],
 								cuda_data["edge_label"])
+
+			loss_list=loss_total.cpu().detach().numpy().tolist()
 
 			x, y=Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
 			acc_count+=x
@@ -90,6 +94,8 @@ def run_train(config):
 		torch.save(model.state_dict(), os.path.join(model_path, "model"+str(epoch)+".pkl"))
 		print("accuracy: ", acc_count/count)
 		print("accuracy: ", acc_count/count, file=log_file)
+		print("loss: ", loss_list)
+		print("loss: ", loss_list, file=log_file)
 
 def run_val(config):
 	with open(config["LTL_vocab"], "r") as f:

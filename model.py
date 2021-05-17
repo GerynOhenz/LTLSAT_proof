@@ -143,6 +143,7 @@ class Model_with_Proof(nn.Module):
 					nhid,
 					dropout,
 					d_block,
+					d_block_hid,
 					P_node_hid,
 					P_edge_hid,
 					loss_weight):
@@ -160,24 +161,30 @@ class Model_with_Proof(nn.Module):
 										nhid=nhid,
 										dropout=dropout)
 
-		self.blockleft=nn.Sequential(nn.Linear(d_model, d_block, bias=True),
+		self.blockleft=nn.Sequential(nn.Linear(d_model, d_block_hid, bias=True),
+										nn.Tanh(),
+										nn.Linear(d_block_hid, d_block, bias=True),
 										nn.Tanh())
-		self.blockright=nn.Sequential(nn.Linear(d_model, d_block, bias=True),
+		self.blockright=nn.Sequential(nn.Linear(d_model, d_block_hid, bias=True),
+										nn.Tanh(),
+										nn.Linear(d_block_hid, d_block, bias=True),
 										nn.Tanh())
 		self.P_node=nn.Sequential(nn.Linear(d_model*2, P_node_hid, bias=True),
-									nn.ReLU(),
+									nn.Tanh(),
 									nn.Linear(P_node_hid, 3, bias=True),
 									nn.Softmax(dim=-1))
+		
 		self.P_edge=nn.Sequential(nn.Linear(d_model*6, P_edge_hid, bias=True),
-									nn.ReLU(),
+									nn.Tanh(),
 									nn.Linear(P_edge_hid, 2, bias=True),
 									nn.Softmax(dim=-1))
+		
 
 		self.logits_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=0)
 		self.block_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
 		self.node_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1, weight=torch.tensor([3.0, 3.0, 1.0]))
 		self.edge_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1, weight=torch.tensor([1.0, 4.0]))
-		self.loss_weight=loss_weight
+		self.loss_weight=loss_weight[:-1]
 
 	def _block_match_(self, encode_output):
 		left_encode=self.blockleft(encode_output[:, 1:-1:1])
@@ -204,7 +211,7 @@ class Model_with_Proof(nn.Module):
 				trace_embedding[i][j]=decode_output[i][target_offset[i][j]:target_offset[i][-1]].mean(dim=0)
 
 		return trace_embedding
-
+	
 	def _edge_embedding_(self, n_node, node_embedding, edge_index):
 		batch_size=node_embedding.shape[0]
 		hid_dim=node_embedding.shape[-1]
@@ -218,6 +225,7 @@ class Model_with_Proof(nn.Module):
 		edge_embedding=torch.cat((head, tail, head-tail), dim=-1).reshape(batch_size, n_node, 6, -1)
 
 		return edge_embedding
+	
 
 	def forward(self,
 				source,
@@ -253,16 +261,15 @@ class Model_with_Proof(nn.Module):
 		node=self.P_node(node_embedding)
 		loss_node=self.node_loss(node.reshape(-1, 3), node_label.reshape(-1))
 
-		edge_embedding=self._edge_embedding_(max_source_len*max_state_len, node_embedding, edge_index)
+		#edge_embedding=self._edge_embedding_(max_source_len*max_state_len, node_embedding, edge_index)
 
-		edge=self.P_edge(edge_embedding)
-		loss_edge=self.edge_loss(edge.reshape(-1, 2), edge_label.reshape(-1))
+		#edge=self.P_edge(edge_embedding)
+		#loss_edge=self.edge_loss(edge.reshape(-1, 2), edge_label.reshape(-1))
 
-		return output_logits, torch.dot(torch.cat((loss_logits[None],
-													loss_block[None],
-													loss_node[None],
-													loss_edge[None])),
-										self.loss_weight)
+		#loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None], loss_edge[None]))
+		loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None]))
+
+		return output_logits, torch.dot(loss_total, self.loss_weight), loss_total
 
 class Evaluator:
 	def __init__(self,
