@@ -39,6 +39,7 @@ def run_train(config):
 							nhid=config["nhid"],
 							dropout=config["dropout"],
 							d_block=config["d_block"],
+							d_block_hid=config["d_block_hid"],
 							P_node_hid=config["P_node_hid"],
 							P_edge_hid=config["P_edge_hid"],
 							loss_weight=torch.FloatTensor(config["loss_weight"]).to(device))
@@ -119,6 +120,7 @@ def run_val(config):
 							nhid=config["nhid"],
 							dropout=config["dropout"],
 							d_block=config["d_block"],
+							d_block_hid=config["d_block_hid"],
 							P_node_hid=config["P_node_hid"],
 							P_edge_hid=config["P_edge_hid"],
 							loss_weight=torch.FloatTensor(config["loss_weight"]).to(device))
@@ -172,6 +174,7 @@ if __name__=="__main__":
 	parser.add_argument('--nhead', type=int, default=4)
 	parser.add_argument('--nhid', type=int, default=512)
 	parser.add_argument('--dropout', type=float, default=0.1)
+	parser.add_argument('--d_block_hid', type=int, default=512)
 	parser.add_argument('--d_block', type=int, default=256)
 	parser.add_argument('--P_node_hid', type=int, default=512)
 	parser.add_argument('--P_edge_hid', type=int, default=512)
