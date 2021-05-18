@@ -1,3 +1,4 @@
+import copy
 import math
 import torch
 import torch.nn as nn
@@ -235,8 +236,7 @@ class Model_with_Proof(nn.Module):
 				target_offset,
 				node_label,
 				edge_index,
-				edge_label,
-				log_file):
+				edge_label):
 
 		batch_size=source.shape[0]
 		max_source_len=source_len.max()
@@ -318,35 +318,68 @@ class Evaluator:
 		source_beam=source.repeat_interleave(self.n_beam, dim=0)
 
 		with torch.no_grad():
-			scores=torch.zeros(batch_size*self.n_beam, device=device)
-			done=torch.BoolTensor([False]*batch_size*self.n_beam, device=device)
+			gen_seq=torch.full((batch_size, 1), self.tgt_sos_idx, dtype=torch.long, device=device)
+			_, _, output_logits=self.model.transformer(source, gen_seq)
+			
+			best_k2_probs, best_k2_idx=output_logits[:, -1, :].topk(self.n_beam)
 
-			gen_seq=torch.full((batch_size*self.n_beam, 1), self.tgt_sos_idx, dtype=torch.long, device=device)
+			#print("best_k2_probs", best_k2_probs, file=log_file)
+			#print("best_k2_idx", best_k2_idx, file=log_file)
 
-			for i in range(self.max_seq_len):
+			scores=F.log_softmax(best_k2_probs, dim=-1).reshape(-1)
+
+			#print("scores", scores, file=log_file)
+
+			best_k2_idx=best_k2_idx.reshape(-1)
+
+			done= best_k2_idx==self.tgt_eos_idx
+			gen_seq=best_k2_idx.unsqueeze(dim=-1)
+			
+			#print("gen_seq", gen_seq, file=log_file)
+
+			for i in range(self.max_seq_len-1):
 				if done.sum().item()==batch_size*self.n_beam:
 					break
 
 				_, _, output_logits=self.model.transformer(source_beam, gen_seq)
 				best_k2_probs, best_k2_idx=output_logits[:, -1, :].topk(self.n_beam)
+
+				#print("best_k2_probs", best_k2_probs, file=log_file)
+				#print("best_k2_idx", best_k2_idx, file=log_file)
+				
 				scores=F.log_softmax(best_k2_probs, dim=-1).masked_fill(done[:, None], 0)+scores[:, None]
 
-				neg_inf_mask = torch.BoolTensor([False]+[True]*(self.n_beam-1), device=device).repeat(batch_size*self.n_beam, 1).logical_and(done[:, None])
+				#print("scores", scores, file=log_file)
+
+				neg_inf_mask = torch.BoolTensor([False]+[True]*(self.n_beam-1)).to(device).repeat(batch_size*self.n_beam, 1).logical_and(done[:, None])
 				scores=scores+torch.zeros(neg_inf_mask.shape, device=neg_inf_mask.device).masked_fill(neg_inf_mask, -1e6)
+
+				#print("scores", scores, file=log_file)
 
 				scores, best_k_idx_in_k2=torch.topk(scores.view(batch_size, -1), self.n_beam, dim=-1, largest=True, sorted=True)
 
+				#print("scores", scores, file=log_file)
+				#print("best_k_idx_in_k2", best_k_idx_in_k2, file=log_file)
+
 				scores=scores.view(-1)
 				best_k_idx=torch.gather(best_k2_idx.view(batch_size, -1), 1, best_k_idx_in_k2).view(-1) #token
-				best_r_idx=best_k_idx_in_k2.view(-1) // self.n_beam #beam resort
+				best_r_idx=best_k_idx_in_k2 // self.n_beam \
+							+torch.arange(0, batch_size*self.n_beam, self.n_beam).to(device)[:, None]#beam resort
+				best_r_idx=best_r_idx.reshape(-1)
+				
 				done=done[best_r_idx]
+
+				#print("best_k_idx", best_k_idx, file=log_file)
+				#print("best_r_idx", best_r_idx, file=log_file)
 
 				best_k_idx=best_k_idx.masked_fill(done, self.tgt_pad_idx)
 				done=done.logical_or(best_k_idx==self.tgt_eos_idx)
 
+				#print("best_k_idx", best_k_idx, file=log_file)
+				#print("done", done, file=log_file)
+
 				gen_seq=torch.cat((gen_seq[best_r_idx, :], best_k_idx.unsqueeze(dim=1)), dim=-1)
 
-			gen_seq=gen_seq[1:]
 			eos_index=gen_seq==self.tgt_eos_idx
 			has_eos, eos_index=eos_index.max(dim=-1)
 			eos_index.masked_fill_(has_eos==0, gen_seq.shape[-1])
@@ -386,7 +419,7 @@ class Evaluator:
 					torch.tensor(target_offset, dtype=torch.long, device=device),\
 					torch.tensor(loop_start, dtype=torch.long, device=device)
 
-	def gen_edge_index(self, source_len, state_len, right_pos, loop_start):
+	def gen_edge_index(self, source_len, state_len, right_pos, loop_start, node_mask):
 		batch_size=source_len.shape[0]
 		max_source_len=source_len.max().item()
 		max_state_len=state_len.max().item()
@@ -403,6 +436,8 @@ class Evaluator:
 			for suffix in range(state_len[batch_index]):
 				for left in range(source_len[batch_index]):
 					index=suffix*max_source_len+left
+					if node_mask[batch_index][index]:
+						continue
 					cnt=0
 					for i in range(2):
 						next_suffix=(suffix+i if suffix+i<state_len[batch_index] else loop_start[batch_index])
@@ -432,8 +467,6 @@ class Evaluator:
 
 			right_pos=block_match.argmax(dim=-1)
 
-			edge_index=self.gen_edge_index(source_len, state_len, right_pos, loop_start)
-
 			block_embedding=self.model._block_embedding_(source_len, encode_output, right_pos)
 
 			trace_embedding=self.model._trace_embedding_(state_len, decode_output, target_offset)
@@ -445,8 +478,10 @@ class Evaluator:
 			node=self.model.P_node(node_embedding).argmax(dim=-1)
 			node_mask=node==2
 
+			edge_index=self.gen_edge_index(source_len, state_len, right_pos, loop_start, node_mask)
+
 			edge_embedding=self.model._edge_embedding_(max_source_len*max_state_len, node_embedding, edge_index)
-			edge_choice_p=self.model.P_edge(edge_embedding).index_select(-1, torch.tensor(0, device=device)).squeeze(dim=-1)
+			edge_choice_p=self.model.P_edge(edge_embedding).index_select(-1, torch.tensor(1, device=device)).squeeze(dim=-1)
 
 			edge, edge_choice=torch.topk(edge_choice_p, 2, dim=-1, largest=True, sorted=True)
 			edge_choice=torch.gather(edge_index, -1, edge_choice)
@@ -457,19 +492,21 @@ class Evaluator:
 		proof=[]
 		for batch_index in range(batch_size):
 			sub_proof=[]
-			q_node=[0]
+			q_node=[torch.tensor(0, device=device, dtype=torch.long)]
 			q_head=0
 			while q_head<len(q_node):
 				cur=q_node[q_head]
 				q_head+=1
-				if node_mask[batch_index][cur]!=2:
+				now=[cur//max_source_len, [cur%max_source_len, right_pos[batch_index][cur%max_source_len]], node[batch_index][cur]]
+				now[0], now[1][0], now[1][1], now[2]=now[0].item(), now[1][0].item(), now[1][1].item(), now[2].item()
+				if not node_mask[batch_index][cur]:
 					for i in range(2):
 						son=edge_choice[batch_index][cur][i]
-						if node_mask[batch_index][son]!=2 and son not in q_node:
+						if not node_mask[batch_index][son] and son not in q_node:
 							q_node.append(son)
-							x=[son//max_source_len, [son%max_source_len, right_pos[batch_index][son%max_source_len]], node_mask[batch_index][son]]
+							x=[son//max_source_len, [son%max_source_len, right_pos[batch_index][son%max_source_len]], node[batch_index][son]]
 							x[0], x[1][0], x[1][1], x[2]=x[0].item(), x[1][0].item(), x[1][1].item(), x[2].item()
-							sub_proof.append(x)
+							sub_proof.append([x, now])
 			proof.append(sub_proof)
 
 		return target.cpu().detach().numpy().tolist(), proof

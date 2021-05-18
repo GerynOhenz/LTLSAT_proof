@@ -87,8 +87,7 @@ def run_train(config):
 								cuda_data["target_offset"],
 								cuda_data["node_label"],
 								cuda_data["edge_index"],
-								cuda_data["edge_label"],
-								log_file)
+								cuda_data["edge_label"])
 
 			loss_list=loss_total.cpu().detach().numpy().tolist()
 
@@ -120,8 +119,7 @@ def run_train(config):
 									cuda_data["target_offset"],
 									cuda_data["node_label"],
 									cuda_data["edge_index"],
-									cuda_data["edge_label"],
-									log_file)
+									cuda_data["edge_label"])
 
 				x, y=Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
 				acc_count+=x
@@ -186,7 +184,7 @@ def run_test(config):
 		cuda_data=convert_to_cuda(data, device)
 		target, proof=evaluator.run(source=cuda_data["source"], source_len=cuda_data["source_len"])
 		target=index_to_sentence(target, index_to_trace)
-		output.append([{"ltl_pre":test_data.raw_data[x]["ltl_pre"], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
+		output.extend([{"ltl_pre":test_data.raw_data[x]["ltl_pre"], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
 
 	with open(os.path.join(config["result_path"], "res-"+os.path.basename(model_file).split(".")[0]+"-"+os.path.basename(config["data_file"])), "w") as f:
 		json.dump(output, fp=f, indent=4)
@@ -216,7 +214,7 @@ if __name__=="__main__":
 	parser.add_argument('--P_node_hid', type=int, default=512)
 	parser.add_argument('--P_edge_hid', type=int, default=512)
 	parser.add_argument('--n_beam', type=int, default=5)
-	parser.add_argument('--loss_weight', type=int, nargs='+', default=[3, 3, 2, 1])
+	parser.add_argument('--loss_weight', type=float, nargs='+', default=[3.0, 3.0, 2.0, 1.0])
 	parser.add_argument('--len_penalty', type=float, default=1.0)
 
 	parser.add_argument('--lr', type=float, default=1e-5)
