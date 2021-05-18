@@ -22,6 +22,8 @@ def run_train(config):
 	log_file=open(os.path.join(model_path, "model.log"), "w")
 
 	train_data=LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
+	if config["val_file"] is not None:
+		val_data=LTL_Dataset(config["val_file"], LTL_to_index, trace_to_index)
 	'''
 	train_loader=DataLoader(train_data, batch_size=config["batch_size"], shuffle=False, collate_fn=input_collate_fn_train)
 
@@ -51,8 +53,9 @@ def run_train(config):
 		model_dict.update(pretrained_dict)
 		model.load_state_dict(model_dict)
 
-		for x in model.transformer.parameters():
-			x.requires_grad=False
+		if config["model_freeze"]==1:
+			for x in model.transformer.parameters():
+				x.requires_grad=False
 		
 	model.to(device)
 
@@ -61,18 +64,18 @@ def run_train(config):
 	epochs=config["epochs"]
 	batch_size=config["batch_size"]
 
-	model.train()
-
 	for epoch in range(epochs):
 		print("epoch: ", epoch)
 		print("epoch: ", epoch, file=log_file)
 		
 		train_loader=DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=input_collate_fn_train)
+
+		loss_list=[]
 		acc_count=0
 		count=0
 
-		loss_list=[]
-		batch_cnt=0
+		print("train")
+		model.train()
 
 		for data in tqdm(train_loader):
 			cuda_data=convert_to_cuda(data, device)
@@ -98,12 +101,38 @@ def run_train(config):
 			optimizer.step()
 
 		torch.save(model.state_dict(), os.path.join(model_path, "model"+str(epoch)+".pkl"))
+
+		if config["val_file"] is not None:
+			val_loader=DataLoader(val_data, batch_size=batch_size, shuffle=False, collate_fn=input_collate_fn_train)
+			acc_count=0
+			count=0
+
+			print("val")
+			model.eval()
+
+			for data in tqdm(val_loader):
+				cuda_data=convert_to_cuda(data, device)
+				output, loss, loss_total=model(cuda_data["source"],
+									cuda_data["source_len"],
+									cuda_data["right_pos_truth"],
+									cuda_data["target"],
+									cuda_data["state_len"],
+									cuda_data["target_offset"],
+									cuda_data["node_label"],
+									cuda_data["edge_index"],
+									cuda_data["edge_label"],
+									log_file)
+
+				x, y=Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
+				acc_count+=x
+				count+=y
+		
 		print("accuracy: ", acc_count/count)
 		print("accuracy: ", acc_count/count, file=log_file)
 		print("loss: ", loss_list)
 		print("loss: ", loss_list, file=log_file)
 
-def run_val(config):
+def run_test(config):
 	with open(config["LTL_vocab"], "r") as f:
 		index_to_LTL=[x.strip() for x in f]
 	with open(config["trace_vocab"], "r") as f:
@@ -166,11 +195,13 @@ if __name__=="__main__":
 	parser = ArgumentParser(description='Proof')
 
 	parser.add_argument('--data_file', type=str, required=True)
+	parser.add_argument('--val_file', type=str, default=None)
 	parser.add_argument('--LTL_vocab', type=str, default='LTL_vocab.txt')
 	parser.add_argument('--trace_vocab', type=str, default='trace_vocab.txt')
 	parser.add_argument('--model_path', type=str, default='model')
 	parser.add_argument('--result_path', type=str, default='result')
 	parser.add_argument('--model_file', type=str, default=None)
+	parser.add_argument('--model_freeze', type=int, default=0)
 
 	parser.add_argument('--device', type=str, default='cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -201,4 +232,4 @@ if __name__=="__main__":
 	if config["is_train"]==1:
 		run_train(config)
 	else:
-		run_val(config)
+		run_test(config)

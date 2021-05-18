@@ -21,6 +21,8 @@ class LTL_Dataset(Dataset):
 		with open(data_file, "r") as f:
 			self.raw_data=json.load(f)
 
+		self.raw_data=self.raw_data[:int(len(self.raw_data)*0.1)]
+
 	def __getitem__(self, item):
 		cur=self.raw_data[item]
 		ret={}
