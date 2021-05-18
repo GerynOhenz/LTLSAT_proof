@@ -131,6 +131,7 @@ def run_train(config):
 		print("accuracy: ", acc_count/count, file=log_file)
 		print("loss: ", loss_list)
 		print("loss: ", loss_list, file=log_file)
+		log_file.flush()
 
 def run_test(config):
 	with open(config["LTL_vocab"], "r") as f:
