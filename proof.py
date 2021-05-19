@@ -5,7 +5,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from argparse import ArgumentParser
 from model import Model_with_Proof, Evaluator
-from utils import LTL_Dataset, input_collate_fn_train, input_collate_fn_test, convert_to_cuda, Accuracy, index_to_sentence
+import utils
 from tqdm import tqdm
 
 def run_train(config):
@@ -21,11 +21,11 @@ def run_train(config):
 	model_path=config["model_path"]
 	log_file=open(os.path.join(model_path, "model.log"), "w")
 
-	train_data=LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
+	train_data=utils.LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
 	if config["val_file"] is not None:
-		val_data=LTL_Dataset(config["val_file"], LTL_to_index, trace_to_index)
+		val_data=utils.LTL_Dataset(config["val_file"], LTL_to_index, trace_to_index)
 	'''
-	train_loader=DataLoader(train_data, batch_size=config["batch_size"], shuffle=False, collate_fn=input_collate_fn_train)
+	train_loader=DataLoader(train_data, batch_size=config["batch_size"], shuffle=False, collate_fn=utils.input_collate_fn_train)
 
 	for data in train_loader:
 		pass
@@ -68,7 +68,7 @@ def run_train(config):
 		print("epoch: ", epoch)
 		print("epoch: ", epoch, file=log_file)
 		
-		train_loader=DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=input_collate_fn_train)
+		train_loader=DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=utils.input_collate_fn_train)
 
 		loss_list=[]
 		acc_count=0
@@ -78,7 +78,7 @@ def run_train(config):
 		model.train()
 
 		for data in tqdm(train_loader):
-			cuda_data=convert_to_cuda(data, device)
+			cuda_data=utils.convert_to_cuda(data, device)
 			output, loss, loss_total=model(cuda_data["source"],
 								cuda_data["source_len"],
 								cuda_data["right_pos_truth"],
@@ -91,7 +91,7 @@ def run_train(config):
 
 			loss_list=loss_total.cpu().detach().numpy().tolist()
 
-			x, y=Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
+			x, y=utils.Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
 			acc_count+=x
 			count+=y
 		
@@ -102,7 +102,7 @@ def run_train(config):
 		torch.save(model.state_dict(), os.path.join(model_path, "model"+str(epoch)+".pkl"))
 
 		if config["val_file"] is not None:
-			val_loader=DataLoader(val_data, batch_size=batch_size, shuffle=False, collate_fn=input_collate_fn_train)
+			val_loader=DataLoader(val_data, batch_size=batch_size, shuffle=False, collate_fn=utils.input_collate_fn_train)
 			acc_count=0
 			count=0
 
@@ -110,7 +110,7 @@ def run_train(config):
 			model.eval()
 
 			for data in tqdm(val_loader):
-				cuda_data=convert_to_cuda(data, device)
+				cuda_data=utils.convert_to_cuda(data, device)
 				output, loss, loss_total=model(cuda_data["source"],
 									cuda_data["source_len"],
 									cuda_data["right_pos_truth"],
@@ -121,7 +121,7 @@ def run_train(config):
 									cuda_data["edge_index"],
 									cuda_data["edge_label"])
 
-				x, y=Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
+				x, y=utils.Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
 				acc_count+=x
 				count+=y
 		
@@ -143,7 +143,7 @@ def run_test(config):
 	device=config["device"]
 	model_file=config["model_file"]
 
-	test_data=LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
+	test_data=utils.LTL_Dataset(config["data_file"], LTL_to_index, trace_to_index)
 	
 	model=Model_with_Proof(n_src_vocab=len(LTL_to_index),
 							n_tgt_vocab=len(trace_to_index),
@@ -176,18 +176,30 @@ def run_test(config):
 
 	batch_size=config["batch_size"]
 		
-	test_loader=DataLoader(test_data, batch_size=batch_size, shuffle=False, collate_fn=input_collate_fn_test)
+	test_loader=DataLoader(test_data, batch_size=batch_size, shuffle=False, collate_fn=utils.input_collate_fn_test)
 
 	output=[]
 	
 	for data in tqdm(test_loader):
-		cuda_data=convert_to_cuda(data, device)
+		cuda_data=utils.convert_to_cuda(data, device)
 		target, proof=evaluator.run(source=cuda_data["source"], source_len=cuda_data["source_len"])
-		target=index_to_sentence(target, index_to_trace)
+		target=utils.index_to_sentence(target, index_to_trace)
 		output.extend([{"ltl_pre":test_data.raw_data[x]["ltl_pre"], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
 
-	with open(os.path.join(config["result_path"], "res-"+os.path.basename(model_file).split(".")[0]+"-"+os.path.basename(config["data_file"])), "w") as f:
+	output_file_name="res-"+os.path.basename(model_file).split(".")[0]+"-"+os.path.basename(config["data_file"])
+
+	with open(os.path.join(config["result_path"], output_file_name), "w") as f:
 		json.dump(output, fp=f, indent=4)
+
+	syntactic_acc=0
+	semantic_acc=0
+	for index, pred in enumerate(output):
+		syntacitc_acc+=utils.syntacitc_acc(pred["trace"], self.raw_data[index])
+		semantic_acc+=utils.semantic_acc(pred["trace"], self.raw_data[index])
+
+	output_file_name=output_file_name.replace("res-", "score-")
+	with open(os.path.join(config["result_path"], output_file_name), "w") as f:
+		json.dump({"syntacitc_acc": syntacitc_acc, "semantic_acc":semantic_acc}, fp=f, indent=4)
 
 if __name__=="__main__":
 

@@ -2,6 +2,7 @@ import os
 import json
 import torch
 from torch.utils.data import Dataset
+from ltl_model_check import check
 
 def convert_to_cuda(x, device):
 	return {key: value.to(device) for key, value in x.items()}
@@ -178,3 +179,11 @@ def Accuracy(outputs, targets, pad_index):
     count = (targets != pad_index).sum().item()
 
     return correct_count, count
+
+def syntactic_acc(pred: str, gd: str):
+    result = (pred == gd['trace'])
+    return result
+
+def semantic_acc(pred: str, df):
+    vocab = [i for i in "abcdefghij"]
+    return check(df['ltl'], pred, vocab)
