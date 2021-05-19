@@ -340,7 +340,7 @@ class Evaluator:
 			best_k2_idx=best_k2_idx.reshape(-1)
 
 			done= best_k2_idx==self.tgt_eos_idx
-			gen_seq=best_k2_idx.unsqueeze(dim=-1)
+			gen_seq=torch.cat((gen_seq.repeat_interleave(self.n_beam, dim=0), best_k2_idx.unsqueeze(dim=-1)), dim=-1)
 			
 			#print("gen_seq", gen_seq, file=log_file)
 
@@ -387,6 +387,7 @@ class Evaluator:
 
 				gen_seq=torch.cat((gen_seq[best_r_idx, :], best_k_idx.unsqueeze(dim=1)), dim=-1)
 
+			gen_seq=gen_seq[:, 1:]
 			eos_index=gen_seq==self.tgt_eos_idx
 			has_eos, eos_index=eos_index.max(dim=-1)
 			eos_index.masked_fill_(has_eos==0, gen_seq.shape[-1])
