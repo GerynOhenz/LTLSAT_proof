@@ -7,6 +7,7 @@ from argparse import ArgumentParser
 from model import Model_with_Proof, Evaluator
 import utils
 from tqdm import tqdm
+from multiprocessing import Process, Pool
 
 def run_train(config):
 	with open(config["LTL_vocab"], "r") as f:
@@ -185,21 +186,38 @@ def run_test(config):
 		target, proof=evaluator.run(source=cuda_data["source"], source_len=cuda_data["source_len"])
 		target=utils.index_to_sentence(target, index_to_trace)
 		output.extend([{"ltl_pre":test_data.raw_data[x]["ltl_pre"], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
-
+	
 	output_file_name="res-"+os.path.basename(model_file).split(".")[0]+"-"+os.path.basename(config["data_file"])
 
 	with open(os.path.join(config["result_path"], output_file_name), "w") as f:
 		json.dump(output, fp=f, indent=4)
 
-	syntactic_acc=0
-	semantic_acc=0
+	print("acc")
+
+	pool=Pool(processes=10)
+	result=[]
+
 	for index, pred in enumerate(output):
-		syntacitc_acc+=utils.syntacitc_acc(pred["trace"], self.raw_data[index])
-		semantic_acc+=utils.semantic_acc(pred["trace"], self.raw_data[index])
+		result.append(pool.apply_async(utils.syntactic_and_semantic_acc, (pred["trace"], test_data.raw_data[index])))
+
+	pool.close()
+	pool.join()
+	result=[x.get() for x in result]
+
+	syn_acc=0
+	sem_acc=0
+
+	for x, y in result:
+		syn_acc+=x
+		sem_acc+=y
+
+	syn_acc/=len(test_data)
+	sem_acc/=len(test_data)
+	total_acc=syn_acc+sem_acc
 
 	output_file_name=output_file_name.replace("res-", "score-")
 	with open(os.path.join(config["result_path"], output_file_name), "w") as f:
-		json.dump({"syntacitc_acc": syntacitc_acc, "semantic_acc":semantic_acc}, fp=f, indent=4)
+		json.dump({"syntactic_acc": syn_acc, "semantic_acc":sem_acc, "total_acc":total_acc}, fp=f, indent=4)
 
 if __name__=="__main__":
 
@@ -226,10 +244,10 @@ if __name__=="__main__":
 	parser.add_argument('--P_node_hid', type=int, default=512)
 	parser.add_argument('--P_edge_hid', type=int, default=512)
 	parser.add_argument('--n_beam', type=int, default=5)
-	parser.add_argument('--loss_weight', type=float, nargs='+', default=[3.0, 3.0, 2.0, 1.0])
+	parser.add_argument('--loss_weight', type=float, nargs='+', default=[1.5, 1.0, 1.5, 1.0])
 	parser.add_argument('--len_penalty', type=float, default=1.0)
 
-	parser.add_argument('--lr', type=float, default=1e-5)
+	parser.add_argument('--lr', type=float, default=2.5e-4)
 
 	parser.add_argument('--batch_size', type=int, default=128)
 	parser.add_argument('--epochs', type=int, default=150)

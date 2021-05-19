@@ -181,9 +181,14 @@ def Accuracy(outputs, targets, pad_index):
     return correct_count, count
 
 def syntactic_acc(pred: str, gd: str):
-    result = (pred == gd['trace'])
-    return result
+	result = (pred == gd['trace'])
+	return result
 
 def semantic_acc(pred: str, df):
-    vocab = [i for i in "abcdefghij"]
-    return check(df['ltl'], pred, vocab)
+	vocab = [i for i in "abcdefghij"]
+	return check(df['ltl'], pred, vocab)
+
+def syntactic_and_semantic_acc(pred: str, df):
+	if pred == df['trace']: return (1, 0)
+	vocab = [i for i in "abcdefghij"]
+	return (0, check(df['ltl'], pred, vocab))
