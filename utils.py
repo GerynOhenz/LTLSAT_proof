@@ -137,6 +137,7 @@ def input_collate_fn_test(batch_data):
 		ret["id"].append(cur["id"])
 		ret["source"].append(cur["source"]+[0]*(source_maxlen-len(cur["source"])))
 		ret["source_len"].append(cur["source_len"])
+		ret["right_pos_truth"].append(cur["right_pos_truth"]+[-1]*(source_maxlen-len(cur["right_pos_truth"])))
 
 	return {key:torch.tensor(value, dtype=torch.long) for key, value in ret.items()}
 

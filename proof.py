@@ -192,7 +192,7 @@ def run_test(config):
 	
 	for data in tqdm(test_loader):
 		cuda_data=utils.convert_to_cuda(data, device)
-		target, proof=evaluator.run(source=cuda_data["source"], source_len=cuda_data["source_len"])
+		target, proof=evaluator.run(source=cuda_data["source"], source_len=cuda_data["source_len"], right_pos_truth=cuda_data["right_pos_truth"])
 		target=utils.index_to_sentence(target, index_to_trace)
 		output.extend([{"ltl_pre":test_data.raw_data[x]["ltl_pre"], "trace":y, "proof":z} for x, y, z in zip(data["id"], target, proof)])
 	
@@ -253,9 +253,9 @@ if __name__=="__main__":
 	parser.add_argument('--P_node_hid', type=int, default=512)
 	parser.add_argument('--P_edge_hid', type=int, default=512)
 	parser.add_argument('--n_beam', type=int, default=5)
-	parser.add_argument('--loss_weight', type=float, nargs='+', default=[1.5, 1.0, 1.5, 1.0])
+	parser.add_argument('--loss_weight', type=float, nargs='+', default=[1.5, 1.5, 1.0])
 	parser.add_argument('--len_penalty', type=float, default=1.0)
-	parser.add_argument('--lr_decay', type=float, default=1.0)
+	parser.add_argument('--lr_decay', type=float, default=0.96)
 
 	parser.add_argument('--lr', type=float, default=2.5e-4)
 

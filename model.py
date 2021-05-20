@@ -162,16 +162,6 @@ class Model_with_Proof(nn.Module):
 										nhid=nhid,
 										dropout=dropout)
 
-		self.blockleft=nn.Sequential(nn.Linear(d_model, d_block_hid, bias=True),
-										nn.Tanh(),
-										nn.Linear(d_block_hid, d_block, bias=True),
-										nn.Tanh())
-
-		self.blockright=nn.Sequential(nn.Linear(d_model, d_block_hid, bias=True),
-										nn.Tanh(),
-										nn.Linear(d_block_hid, d_block, bias=True),
-										nn.Tanh())
-
 		self.P_node=nn.Sequential(nn.Linear(d_model*2, P_node_hid, bias=True),
 									nn.Tanh(),
 									nn.Linear(P_node_hid, 3, bias=True))
@@ -186,12 +176,6 @@ class Model_with_Proof(nn.Module):
 		self.node_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
 		self.edge_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1, weight=torch.tensor([1.0, 4.0]))
 		self.loss_weight=loss_weight
-
-	def _block_match_(self, encode_output):
-		left_encode=self.blockleft(encode_output[:, 1:-1:1])
-		right_encode=self.blockright(encode_output[:, 1:-1:1])
-		block_match=torch.matmul(left_encode, right_encode.transpose(1, 2))
-		return block_match
 
 	def _block_embedding_(self, source_len, encode_output, right_pos_truth):
 		batch_size=source_len.shape[0]
@@ -248,10 +232,6 @@ class Model_with_Proof(nn.Module):
 		encode_output, decode_output, output_logits=self.transformer(source, target[:, :-1])
 		loss_logits=self.logits_loss(output_logits.reshape(-1, self.n_tgt_vocab), target[:, 1:].reshape(-1))
 
-		block_match=self._block_match_(encode_output)
-
-		loss_block=self.block_loss(block_match.reshape(-1, block_match.shape[-1]), right_pos_truth.reshape(-1))
-
 		#print("encode_output", encode_output, file=log_file)
 
 		#print("decode_output", decode_output, file=log_file)
@@ -278,7 +258,7 @@ class Model_with_Proof(nn.Module):
 		edge=self.P_edge(edge_embedding)
 		loss_edge=self.edge_loss(edge.reshape(-1, 2), edge_label.reshape(-1))
 
-		loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None], loss_edge[None]))
+		loss_total=torch.cat((loss_logits[None], loss_node[None], loss_edge[None]))
 		#loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None]))
 
 		return output_logits, torch.dot(loss_total, self.loss_weight), loss_total
@@ -422,7 +402,7 @@ class Evaluator:
 					torch.tensor(target_offset, dtype=torch.long, device=device),\
 					torch.tensor(loop_start, dtype=torch.long, device=device)
 
-	def gen_edge_index(self, source_len, state_len, right_pos, loop_start, node_mask):
+	def gen_edge_index(self, source_len, state_len, right_pos_truth, loop_start, node_mask):
 		batch_size=source_len.shape[0]
 		max_source_len=source_len.max().item()
 		max_state_len=state_len.max().item()
@@ -450,12 +430,12 @@ class Evaluator:
 						if left+1<source_len[batch_index]:
 							edge_index_list[-1][index][cnt]=next_suffix*max_source_len+left+1
 							cnt+=1
-							if right_pos[batch_index][left+1]+1<source_len[batch_index]:
-								edge_index_list[-1][index][cnt]=next_suffix*max_source_len+right_pos[batch_index][left+1]+1
+							if right_pos_truth[batch_index][left+1]+1<source_len[batch_index]:
+								edge_index_list[-1][index][cnt]=next_suffix*max_source_len+right_pos_truth[batch_index][left+1]+1
 								cnt+=1
 		return torch.tensor(edge_index_list, dtype=torch.long, device=source_len.device)
 
-	def run(self, source, source_len):
+	def run(self, source, source_len, right_pos_truth):
 
 		with torch.no_grad():
 			target, state_len, target_offset, loop_start=self.beam_search(source)
@@ -466,11 +446,8 @@ class Evaluator:
 
 			encode_output, decode_output, output_logits=self.model.transformer(source, target[:, :-1])
 
-			block_match=self.model._block_match_(encode_output)
 
-			right_pos=block_match.argmax(dim=-1)
-
-			block_embedding=self.model._block_embedding_(source_len, encode_output, right_pos)
+			block_embedding=self.model._block_embedding_(source_len, encode_output, right_pos_truth)
 
 			trace_embedding=self.model._trace_embedding_(state_len, decode_output, target_offset)
 
@@ -481,7 +458,7 @@ class Evaluator:
 			node=self.model.P_node(node_embedding).argmax(dim=-1)
 			node_mask=node==2
 
-			edge_index=self.gen_edge_index(source_len, state_len, right_pos, loop_start, node_mask)
+			edge_index=self.gen_edge_index(source_len, state_len, right_pos_truth, loop_start, node_mask)
 
 			edge_embedding=self.model._edge_embedding_(max_source_len*max_state_len, node_embedding, edge_index)
 			edge_choice_p=self.model.P_edge(edge_embedding).index_select(-1, torch.tensor(1, device=device)).squeeze(dim=-1)
@@ -500,14 +477,14 @@ class Evaluator:
 			while q_head<len(q_node):
 				cur=q_node[q_head]
 				q_head+=1
-				now=[cur//max_source_len, [cur%max_source_len, right_pos[batch_index][cur%max_source_len]], node[batch_index][cur]]
+				now=[cur//max_source_len, [cur%max_source_len, right_pos_truth[batch_index][cur%max_source_len]], node[batch_index][cur]]
 				now[0], now[1][0], now[1][1], now[2]=now[0].item(), now[1][0].item(), now[1][1].item(), now[2].item()
 				if not node_mask[batch_index][cur]:
 					for i in range(2):
 						son=edge_choice[batch_index][cur][i]
 						if not node_mask[batch_index][son] and son not in q_node:
 							q_node.append(son)
-							x=[son//max_source_len, [son%max_source_len, right_pos[batch_index][son%max_source_len]], node[batch_index][son]]
+							x=[son//max_source_len, [son%max_source_len, right_pos_truth[batch_index][son%max_source_len]], node[batch_index][son]]
 							x[0], x[1][0], x[1][1], x[2]=x[0].item(), x[1][0].item(), x[1][1].item(), x[2].item()
 							sub_proof.append([x, now])
 			proof.append(sub_proof)
