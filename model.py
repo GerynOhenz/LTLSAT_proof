@@ -147,7 +147,6 @@ class Model_with_Proof(nn.Module):
 					d_block_hid,
 					d_proj_hid,
 					P_node_hid,
-					P_edge_hid,
 					loss_weight):
 
 		super(Model_with_Proof, self).__init__()
@@ -185,11 +184,6 @@ class Model_with_Proof(nn.Module):
 									nn.Tanh(),
 									nn.Linear(P_node_hid, 3, bias=True))
 
-		self.P_edge=nn.Sequential(nn.Linear(d_model*6, P_edge_hid, bias=True),
-									nn.Tanh(),
-									nn.Linear(P_edge_hid, 2, bias=True))
-		
-
 		self.logits_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=0)
 		self.block_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
 		self.node_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
@@ -222,21 +216,6 @@ class Model_with_Proof(nn.Module):
 				trace_embedding[i][j]=self.trace_proj(decode_output[i][target_offset[i][j]:eos].mean(dim=0))
 
 		return trace_embedding
-	
-	def _edge_embedding_(self, n_node, node_embedding, edge_index):
-		batch_size=node_embedding.shape[0]
-		hid_dim=node_embedding.shape[-1]
-
-		# print(node_embedding.shape)
-		# print(n_node)
-		# print(edge_index)
-
-		head=torch.repeat_interleave(node_embedding, 6, dim=1)
-		tail=torch.gather(node_embedding, 1, torch.repeat_interleave(edge_index, hid_dim, dim=-1).reshape(batch_size, -1, hid_dim))
-		edge_embedding=torch.cat((head, tail, head-tail), dim=-1).reshape(batch_size, n_node, 6, -1)
-
-		return edge_embedding
-	
 
 	def forward(self,
 				source,
@@ -245,9 +224,7 @@ class Model_with_Proof(nn.Module):
 				target,
 				state_len,
 				target_offset,
-				node_label,
-				edge_index,
-				edge_label):
+				node_label):
 
 		batch_size=source.shape[0]
 		max_source_len=source_len.max()
@@ -282,13 +259,7 @@ class Model_with_Proof(nn.Module):
 		node=self.P_node(node_embedding)
 		loss_node=self.node_loss(node.reshape(-1, 3), node_label.reshape(-1))
 
-		edge_embedding=self._edge_embedding_(max_source_len*max_state_len, node_embedding, edge_index)
-
-		edge=self.P_edge(edge_embedding)
-		loss_edge=self.edge_loss(edge.reshape(-1, 2), edge_label.reshape(-1))
-
-		loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None], loss_edge[None]))
-		#loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None]))
+		loss_total=torch.cat((loss_logits[None], loss_block[None], loss_node[None]))
 
 		return output_logits, torch.dot(loss_total, self.loss_weight), loss_total
 
@@ -431,39 +402,6 @@ class Evaluator:
 					torch.tensor(target_offset, dtype=torch.long, device=device),\
 					torch.tensor(loop_start, dtype=torch.long, device=device)
 
-	def gen_edge_index(self, source_len, state_len, right_pos, loop_start, node_mask):
-		batch_size=source_len.shape[0]
-		max_source_len=source_len.max().item()
-		max_state_len=state_len.max().item()
-		n_node=max_source_len*max_state_len
-		edge_index_list=[]
-
-		# print(n_node)
-		# print(state_len)
-		# print(source_len)
-		# print(right_pos)
-
-		for batch_index in range(batch_size):
-			edge_index_list.append([[0]*6 for _ in range(n_node)])
-			for suffix in range(state_len[batch_index]):
-				for left in range(source_len[batch_index]):
-					index=suffix*max_source_len+left
-					if node_mask[batch_index][index]:
-						continue
-					cnt=0
-					for i in range(2):
-						next_suffix=(suffix+i if suffix+i<state_len[batch_index] else loop_start[batch_index])
-						
-						edge_index_list[-1][index][cnt]=next_suffix*max_source_len+left
-						cnt+=1
-						if left+1<source_len[batch_index]:
-							edge_index_list[-1][index][cnt]=next_suffix*max_source_len+left+1
-							cnt+=1
-							if right_pos[batch_index][left+1]+1<source_len[batch_index]:
-								edge_index_list[-1][index][cnt]=next_suffix*max_source_len+right_pos[batch_index][left+1]+1
-								cnt+=1
-		return torch.tensor(edge_index_list, dtype=torch.long, device=source_len.device)
-
 	def run(self, source, source_len):
 
 		with torch.no_grad():
@@ -488,15 +426,6 @@ class Evaluator:
 									dim=-1)
 
 			node=self.model.P_node(node_embedding).argmax(dim=-1)
-			node_mask=node==2
-
-			edge_index=self.gen_edge_index(source_len, state_len, right_pos, loop_start, node_mask)
-
-			edge_embedding=self.model._edge_embedding_(max_source_len*max_state_len, node_embedding, edge_index)
-			edge_choice_p=self.model.P_edge(edge_embedding).index_select(-1, torch.tensor(1, device=device)).squeeze(dim=-1)
-
-			edge, edge_choice=torch.topk(edge_choice_p, 2, dim=-1, largest=True, sorted=True)
-			edge_choice=torch.gather(edge_index, -1, edge_choice)
 
 		max_source_len=source_len.max()
 		n_node=source_len.max()*state_len.max()
@@ -504,21 +433,11 @@ class Evaluator:
 		proof=[]
 		for batch_index in range(batch_size):
 			sub_proof=[]
-			q_node=[torch.tensor(0, device=device, dtype=torch.long)]
-			q_head=0
-			while q_head<len(q_node):
-				cur=q_node[q_head]
-				q_head+=1
-				now=[cur//max_source_len, [cur%max_source_len, right_pos[batch_index][cur%max_source_len]], node[batch_index][cur]]
-				now[0], now[1][0], now[1][1], now[2]=now[0].item(), now[1][0].item(), now[1][1].item(), now[2].item()
-				if not node_mask[batch_index][cur]:
-					for i in range(2):
-						son=edge_choice[batch_index][cur][i]
-						if not node_mask[batch_index][son] and son not in q_node:
-							q_node.append(son)
-							x=[son//max_source_len, [son%max_source_len, right_pos[batch_index][son%max_source_len]], node[batch_index][son]]
-							x[0], x[1][0], x[1][1], x[2]=x[0].item(), x[1][0].item(), x[1][1].item(), x[2].item()
-							sub_proof.append([x, now])
+			for i in range(source_len[batch_index]):
+				for j in range(state_len[batch_index]):
+					index=j*max_source_len+i
+					if node[batch_index][index]!=2:
+						sub_proof.append([j, [i, right_pos[i].item()], node[batch_index][index].item()])
 			proof.append(sub_proof)
 
 		return target.cpu().detach().numpy().tolist(), proof
