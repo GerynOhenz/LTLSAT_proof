@@ -51,7 +51,7 @@ def run_train(config):
 	if config["model_file"] is not None:
 		model_dict=model.state_dict()
 		tmp_dict=torch.load(config["model_file"])
-		
+
 		pretrained_dict={}
 		for key, value in tmp_dict.items():
 			if "transformer."+key in model_dict:
@@ -68,9 +68,8 @@ def run_train(config):
 		
 	model.to(device)
 
-	optimizer=lr_scheduler.ExponentialLR(
-					Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config["lr"]),
-					gamma=0.97)
+	optimizer=Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config["lr"])
+	lr_decay=lr_scheduler.ExponentialLR(optimizer, gamma=config["lr_decay"])
 
 	epochs=config["epochs"]
 	batch_size=config["batch_size"]
@@ -109,6 +108,7 @@ def run_train(config):
 			optimizer.zero_grad()
 			loss.backward()
 			optimizer.step()
+			lr_decay.step()
 
 		torch.save(model.state_dict(), os.path.join(model_path, "model"+str(epoch)+".pkl"))
 
@@ -258,6 +258,7 @@ if __name__=="__main__":
 	parser.add_argument('--n_beam', type=int, default=5)
 	parser.add_argument('--loss_weight', type=float, nargs='+', default=[1.5, 1.0, 1.5, 1.0])
 	parser.add_argument('--len_penalty', type=float, default=1.0)
+	parser.add_argument('--lr_decay', type=float, default=1.0)
 
 	parser.add_argument('--lr', type=float, default=2.5e-4)
 
