@@ -50,8 +50,15 @@ def run_train(config):
 
 	if config["model_file"] is not None:
 		model_dict=model.state_dict()
-		pretrained_dict=torch.load(config["model_file"])
-		pretrained_dict={("transformer."+key):value for key, value in pretrained_dict.items() if "transformer."+key in model_dict}
+		tmp_dict=torch.load(config["model_file"])
+		
+		pretrained_dict={}
+		for key, value in tmp_dict.items():
+			if "transformer."+key in model_dict:
+				pretrained_dict["transformer."+key]=value
+			elif key in model_dict:
+				pretrained_dict[key]=value
+		
 		model_dict.update(pretrained_dict)
 		model.load_state_dict(model_dict)
 
