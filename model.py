@@ -145,7 +145,6 @@ class Model_with_Proof(nn.Module):
 					dropout,
 					d_block,
 					d_block_hid,
-					d_TL_hid,
 					P_node_hid,
 					P_edge_hid,
 					loss_weight):
@@ -172,10 +171,6 @@ class Model_with_Proof(nn.Module):
 										nn.Tanh(),
 										nn.Linear(d_block_hid, d_block, bias=True),
 										nn.Tanh())
-
-		self.trace_to_LTL=nn.Sequential(nn.Linear(d_model, d_TL_hid, bias=True),
-										nn.Tanh(),
-										nn.Linear(d_TL_hid, d_model, bias=True))
 
 		self.P_node=nn.Sequential(nn.Linear(d_model*2, P_node_hid, bias=True),
 									nn.Tanh(),
@@ -215,7 +210,7 @@ class Model_with_Proof(nn.Module):
 		for i in range(batch_size):
 			eos=target_offset[i][state_len[i]]
 			for j in range(state_len[i]):
-				trace_embedding[i][j]=self.trace_to_LTL(decode_output[i][target_offset[i][j]:eos].mean(dim=0))
+				trace_embedding[i][j]=decode_output[i][target_offset[i][j]:eos].mean(dim=0)
 
 		return trace_embedding
 	
