@@ -1,7 +1,7 @@
 import os
 import json
 import torch
-from torch.optim import Adam
+from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader
 from argparse import ArgumentParser
 from model import Model_with_Proof, Evaluator
@@ -61,7 +61,9 @@ def run_train(config):
 		
 	model.to(device)
 
-	optimizer=Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config["lr"])
+	optimizer=lr_scheduler.ExponentialLR(
+					Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config["lr"]),
+					gamma=0.97)
 
 	epochs=config["epochs"]
 	batch_size=config["batch_size"]
