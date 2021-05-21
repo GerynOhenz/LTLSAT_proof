@@ -108,7 +108,8 @@ def run_train(config):
 			optimizer.zero_grad()
 			loss.backward()
 			optimizer.step()
-			lr_decay.step()
+		
+		lr_decay.step()
 
 		torch.save(model.state_dict(), os.path.join(model_path, "model"+str(epoch)+".pkl"))
 
