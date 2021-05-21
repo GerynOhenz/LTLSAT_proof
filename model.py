@@ -172,7 +172,6 @@ class Model_with_Proof(nn.Module):
 		
 
 		self.logits_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=0)
-		self.block_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
 		self.node_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
 		self.edge_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1, weight=torch.tensor([1.0, 4.0]))
 		self.loss_weight=loss_weight
