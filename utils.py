@@ -126,7 +126,7 @@ def input_collate_fn_train(batch_data):
 	return {key:torch.tensor(value, dtype=torch.long) for key, value in ret.items()}
 
 def input_collate_fn_test(batch_data):
-	ret={"id":[], "source":[], "source_len":[]}
+	ret={"id":[], "source":[], "source_len":[], "right_pos_truth":[]}
 
 	source_maxlen=0
 
