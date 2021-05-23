@@ -146,7 +146,6 @@ class Model_with_Proof(nn.Module):
 					d_block,
 					d_block_hid,
 					P_node_hid,
-					P_edge_hid,
 					loss_weight):
 
 		super(Model_with_Proof, self).__init__()
