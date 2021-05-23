@@ -256,7 +256,7 @@ if __name__=="__main__":
 	parser.add_argument('--n_beam', type=int, default=5)
 	parser.add_argument('--loss_weight', type=float, nargs='+', default=[1.5, 1.0, 1.5, 1.0])
 	parser.add_argument('--len_penalty', type=float, default=1.0)
-	parser.add_argument('--lr_decay', type=float, default=0.96)
+	parser.add_argument('--lr_decay', type=float, default=0.98)
 
 	parser.add_argument('--lr', type=float, default=2.5e-4)
 
