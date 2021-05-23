@@ -44,7 +44,6 @@ def run_train(config):
 							d_block=config["d_block"],
 							d_block_hid=config["d_block_hid"],
 							P_node_hid=config["P_node_hid"],
-							P_edge_hid=config["P_edge_hid"],
 							loss_weight=torch.FloatTensor(config["loss_weight"]).to(device))
 
 	if config["model_file"] is not None:
@@ -94,9 +93,7 @@ def run_train(config):
 								cuda_data["target"],
 								cuda_data["state_len"],
 								cuda_data["target_offset"],
-								cuda_data["node_label"],
-								cuda_data["edge_index"],
-								cuda_data["edge_label"])
+								cuda_data["node_label"])
 
 			loss_list=loss_total.cpu().detach().numpy().tolist()
 
@@ -128,9 +125,7 @@ def run_train(config):
 									cuda_data["target"],
 									cuda_data["state_len"],
 									cuda_data["target_offset"],
-									cuda_data["node_label"],
-									cuda_data["edge_index"],
-									cuda_data["edge_label"])
+									cuda_data["node_label"])
 
 				x, y=utils.Accuracy(output, cuda_data["target"][:, 1:], trace_to_index["[PAD]"])
 				acc_count+=x
@@ -166,7 +161,6 @@ def run_test(config):
 							d_block=config["d_block"],
 							d_block_hid=config["d_block_hid"],
 							P_node_hid=config["P_node_hid"],
-							P_edge_hid=config["P_edge_hid"],
 							loss_weight=torch.FloatTensor(config["loss_weight"]).to(device))
 
 	model.load_state_dict(torch.load(model_file))
@@ -252,11 +246,10 @@ if __name__=="__main__":
 	parser.add_argument('--d_block_hid', type=int, default=512)
 	parser.add_argument('--d_block', type=int, default=256)
 	parser.add_argument('--P_node_hid', type=int, default=512)
-	parser.add_argument('--P_edge_hid', type=int, default=512)
 	parser.add_argument('--n_beam', type=int, default=5)
-	parser.add_argument('--loss_weight', type=float, nargs='+', default=[1.5, 1.0, 1.5, 1.0])
+	parser.add_argument('--loss_weight', type=float, nargs='+', default=[1.5, 1.0, 1.5])
 	parser.add_argument('--len_penalty', type=float, default=1.0)
-	parser.add_argument('--lr_decay', type=float, default=0.96)
+	parser.add_argument('--lr_decay', type=float, default=0.98)
 
 	parser.add_argument('--lr', type=float, default=2.5e-4)
 

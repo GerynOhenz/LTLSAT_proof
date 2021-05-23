@@ -58,9 +58,7 @@ def input_collate_fn_train(batch_data):
 			"target":[],
 			"state_len":[],
 			"target_offset":[],
-			"node_label":[],
-			"edge_index":[],
-			"edge_label":[]
+			"node_label":[]
 			}
 
 	source_maxlen=0
@@ -83,8 +81,6 @@ def input_collate_fn_train(batch_data):
 		ret["state_len"].append(cur["state_len"])
 		ret["target_offset"].append(cur["target_offset"]+[0]*(state_maxlen+1-len(cur["target_offset"])))
 		ret["node_label"].append([-1]*node_maxlen)
-		ret["edge_index"].append([[(0, 0)]*6 for _ in range(node_maxlen)])
-		ret["edge_label"].append([[-1]*6 for _ in range(node_maxlen)])
 
 		for x, y in cur["proof"]:
 			x_index=x[0]*source_maxlen+x[1][0]
@@ -99,29 +95,6 @@ def input_collate_fn_train(batch_data):
 				if ret["node_label"][-1][index]==-1:
 					ret["node_label"][-1][index]=2
 					continue
-
-				cnt=0
-				for i in range(2):
-					next_suffix=(suffix+i if suffix+i<cur["state_len"] else cur["loop_start"])
-
-					ret["edge_index"][-1][index][cnt]=(next_suffix, left)
-					cnt+=1
-					if left+1<cur["source_len"]:
-						ret["edge_index"][-1][index][cnt]=(next_suffix, left+1)
-						cnt+=1
-						if cur["right_pos_truth"][left+1]+1<cur["source_len"]:
-							ret["edge_index"][-1][index][cnt]=(next_suffix, cur["right_pos_truth"][left+1]+1)
-							cnt+=1
-				ret["edge_label"][-1][index][:cnt]=[0]*cnt
-
-		for x, y in cur["proof"]:
-			y_index=y[0]*source_maxlen+y[1][0]
-			ret["edge_label"][-1][y_index][ret["edge_index"][-1][y_index].index((x[0], x[1][0]))]=1
-
-		for node_index in range(len(ret["edge_index"][-1])):
-			for son_index in range(len(ret["edge_index"][-1][node_index])):
-				x, y=ret["edge_index"][-1][node_index][son_index]
-				ret["edge_index"][-1][node_index][son_index]=x*source_maxlen+y
 
 	return {key:torch.tensor(value, dtype=torch.long) for key, value in ret.items()}
 
