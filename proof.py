@@ -248,7 +248,7 @@ if __name__=="__main__":
 	parser.add_argument('--d_block_hid', type=int, default=512)
 	parser.add_argument('--d_block', type=int, default=256)
 	parser.add_argument('--d_proj_hid', type=int, default=512)
-	parser.add_argument('--P_node_hid', type=int, default=512)
+	parser.add_argument('--P_node_hid', type=int, default=1024)
 	parser.add_argument('--n_beam', type=int, default=5)
 	parser.add_argument('--loss_weight', type=float, nargs='+', default=[1.5, 1.0, 1.5])
 	parser.add_argument('--len_penalty', type=float, default=1.0)

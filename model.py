@@ -172,15 +172,15 @@ class Model_with_Proof(nn.Module):
 										nn.Linear(d_block_hid, d_block, bias=True),
 										nn.Tanh())
 
-		self.trace_proj=nn.Sequential(nn.Linear(d_model, d_proj_hid, bias=True),
-										nn.ReLU(),
-										nn.Linear(d_proj_hid, d_model, bias=True))
+		self.trace_proj=nn.Sequential(nn.Linear(d_model*2, d_proj_hid, bias=True),
+										nn.Tanh(),
+										nn.Linear(d_proj_hid, d_model*2, bias=True))
 
-		self.LTL_proj=nn.Sequential(nn.Linear(d_model, d_proj_hid, bias=True),
-										nn.ReLU(),
-										nn.Linear(d_proj_hid, d_model, bias=True))
+		self.LTL_proj=nn.Sequential(nn.Linear(d_model*2, d_proj_hid, bias=True),
+										nn.Tanh(),
+										nn.Linear(d_proj_hid, d_model*2, bias=True))
 
-		self.P_node=nn.Sequential(nn.Linear(d_model*2, P_node_hid, bias=True),
+		self.P_node=nn.Sequential(nn.Linear(d_model*4, P_node_hid, bias=True),
 									nn.Tanh(),
 									nn.Linear(P_node_hid, 3, bias=True))
 
@@ -202,7 +202,8 @@ class Model_with_Proof(nn.Module):
 
 		for i in range(batch_size):
 			for j in range(source_len[i]):
-				block_embedding[i][j]=self.LTL_proj(encode_output[i][1+j:1+right_pos_truth[i][j]+1].mean(dim=0))
+				sub=encode_output[i][1+j:1+right_pos_truth[i][j]+1]
+				block_embedding[i][j]=self.LTL_proj(torch.cat((sub.mean(dim=0), sub.max(dim=0)[0]), dim=-1))
 
 		return block_embedding
 
@@ -213,7 +214,8 @@ class Model_with_Proof(nn.Module):
 		for i in range(batch_size):
 			eos=target_offset[i][state_len[i]]
 			for j in range(state_len[i]):
-				trace_embedding[i][j]=self.trace_proj(decode_output[i][target_offset[i][j]:eos].mean(dim=0))
+				sub=decode_output[i][target_offset[i][j]:eos]
+				trace_embedding[i][j]=self.trace_proj(torch.cat((sub.mean(dim=0), sub.max(dim=0)[0]), dim=-1))
 
 		return trace_embedding
 
