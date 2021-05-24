@@ -187,7 +187,6 @@ class Model_with_Proof(nn.Module):
 		self.logits_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=0)
 		self.block_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
 		self.node_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1)
-		self.edge_loss=nn.CrossEntropyLoss(reduction="mean", ignore_index=-1, weight=torch.tensor([1.0, 4.0]))
 		self.loss_weight=loss_weight
 
 	def _block_match_(self, encode_output):
@@ -198,7 +197,7 @@ class Model_with_Proof(nn.Module):
 
 	def _block_embedding_(self, source_len, encode_output, right_pos_truth):
 		batch_size=source_len.shape[0]
-		block_embedding=torch.zeros((batch_size, source_len.max(), self.d_model), device=source_len.device)
+		block_embedding=torch.zeros((batch_size, source_len.max(), self.d_model*2), device=source_len.device)
 
 		for i in range(batch_size):
 			for j in range(source_len[i]):
@@ -209,7 +208,7 @@ class Model_with_Proof(nn.Module):
 
 	def _trace_embedding_(self, state_len, decode_output, target_offset):
 		batch_size=state_len.shape[0]
-		trace_embedding=torch.zeros((batch_size, state_len.max(), self.d_model), device=state_len.device)
+		trace_embedding=torch.zeros((batch_size, state_len.max(), self.d_model*2), device=state_len.device)
 
 		for i in range(batch_size):
 			eos=target_offset[i][state_len[i]]
