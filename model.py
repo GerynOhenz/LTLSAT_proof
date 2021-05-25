@@ -245,8 +245,8 @@ class Model_with_Proof(nn.Module):
 
 		#print("trace_embedding", trace_embedding, file=log_file)
 
-		node_embedding=torch.cat((torch.repeat_interleave(block_embedding, max_state_len, dim=1),
-								trace_embedding.repeat(1, max_source_len, 1)),
+		node_embedding=torch.cat((block_embedding.repeat(1, max_state_len, 1),
+								torch.repeat_interleave(trace_embedding, max_source_len, dim=1)),
 								dim=-1)
 
 		node=self.P_node(node_embedding)
@@ -450,9 +450,9 @@ class Evaluator:
 
 			trace_embedding=self.model._trace_embedding_(state_len, decode_output, target_offset)
 
-			node_embedding=torch.cat((torch.repeat_interleave(block_embedding, max_state_len, dim=1),
-									trace_embedding.repeat(1, max_source_len, 1)),
-									dim=-1)
+			node_embedding=torch.cat((block_embedding.repeat(1, max_state_len, 1),
+								torch.repeat_interleave(trace_embedding, max_source_len, dim=1)),
+								dim=-1)
 
 			node=self.model.P_node(node_embedding).argmax(dim=-1)
 			node_mask=node==2
