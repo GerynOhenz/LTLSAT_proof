@@ -174,11 +174,11 @@ class Model_with_Proof(nn.Module):
 										nn.Tanh())
 
 		self.trace_proj=nn.Sequential(nn.Linear(d_model, d_proj_hid, bias=True),
-										nn.ReLU(),
+										nn.Tanh(),
 										nn.Linear(d_proj_hid, d_model, bias=True))
 
 		self.LTL_proj=nn.Sequential(nn.Linear(d_model, d_proj_hid, bias=True),
-										nn.ReLU(),
+										nn.Tanh(),
 										nn.Linear(d_proj_hid, d_model, bias=True))
 
 		self.P_node=nn.Sequential(nn.Linear(d_model*2, P_node_hid, bias=True),
