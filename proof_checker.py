@@ -73,7 +73,7 @@ if __name__ == "__main__":
     parser.add_argument('--testfile', type=str, required=True , help='test file in json format')
     parser.add_argument('--netfile', type=str, required=True, help='network output file in json format')
     parser.add_argument('-o', type=str, required=True, help='output result file')
-    parser.add_argument('-t', type=int, required=False, default=40, help='thread number')
+    parser.add_argument('-t', type=int, required=False, default=10, help='thread number')
     parser.add_argument('-s', type=int, required=False, default=10000, help='size')
 
     args = parser.parse_args()
@@ -116,8 +116,25 @@ if __name__ == "__main__":
         unfound_node+=i[2]
         complete_right+=i[3]
 
+    acc=0 if true_node==0 else true_node/(true_node+false_node)
+    recall=0 if true_node==0 else true_node/(true_node+unfound_node)
+    F1=0 if true_node==0 else 2*acc*recall/(acc+recall)
     f=open(ofile,'w')
-    json.dump({'all_result':ret,'true_node':true_node,'false_node':false_node,'unfound_node':unfound_node,'complete_right':complete_right},f)
+    json.dump({'acc':acc,
+    			'recall':recall,
+    			'F1':F1,
+    			'all_result':ret,
+    			'true_node':true_node,
+    			'false_node':false_node,
+    			'unfound_node':unfound_node,
+    			'complete_right':complete_right},f)
     f.close()
-    print('\n',{'true_node':true_node,'false_node':false_node,'unfound_node':unfound_node,'complete_right':complete_right})
+    print('\n',{'acc':acc,
+    			'recall':recall,
+    			'F1':F1,
+    			'all_result':ret,
+    			'true_node':true_node,
+    			'false_node':false_node,
+    			'unfound_node':unfound_node,
+    			'complete_right':complete_right})
 
