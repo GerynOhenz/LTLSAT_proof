@@ -433,11 +433,11 @@ class Evaluator:
 		proof=[]
 		for batch_index in range(batch_size):
 			sub_proof=[]
-			for i in range(source_len[batch_index]):
-				for j in range(state_len[batch_index]):
-					index=j*max_source_len+i
+			for suffix in range(state_len[batch_index]):
+				for left in range(source_len[batch_index]):
+					index=suffix*max_source_len+left
 					if node[batch_index][index]!=2:
-						sub_proof.append([j, [i, right_pos[i].item()], node[batch_index][index].item()])
+						sub_proof.append([suffix, [left, right_pos[batch_index][left].item()], node[batch_index][index].item()])
 			proof.append(sub_proof)
 
 		return target.cpu().detach().numpy().tolist(), proof
