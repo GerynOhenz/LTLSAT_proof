@@ -1,6 +1,6 @@
 import os
 
-with open("model.log", "r") as f:
+with open("model/model.log", "r") as f:
 	lines=[x.strip() for x in f]
 
 best_epoch=0
